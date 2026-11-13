@@ -20,6 +20,7 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="candidate")  # candidate, invigilator, admin
+    active_token = Column(String(500), nullable=True)  # Single active session token enforcement
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
     candidate = relationship("Candidate", back_populates="user", uselist=False, cascade="all, delete-orphan")

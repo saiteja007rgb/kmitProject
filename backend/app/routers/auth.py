@@ -7,6 +7,7 @@ from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserProfil
 from app.utils.security import verify_password, create_access_token, hash_password
 from app.routers.deps import get_current_user
 from app.config import settings
+from app.redis_client import redis_manager
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -77,6 +78,11 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         "candidate_id": candidate_id
     })
 
+    if assigned_role == "candidate":
+        new_user.active_token = token
+        await db.commit()
+        await redis_manager.set_raw(f"active_token:{new_user.id}", token)
+
     return TokenResponse(
         access_token=token,
         token_type="bearer",
@@ -113,6 +119,11 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         "role": user.role,
         "candidate_id": candidate_id
     })
+
+    if user.role == "candidate":
+        user.active_token = token
+        await db.commit()
+        await redis_manager.set_raw(f"active_token:{user.id}", token)
 
     return TokenResponse(
         access_token=token,

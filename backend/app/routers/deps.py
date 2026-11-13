@@ -40,6 +40,15 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User no longer exists",
         )
+    
+    # Single active session enforcement for candidates (invalidates older login tokens)
+    if user.role == "candidate" and user.active_token and user.active_token != token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalidated by a newer login from another device or window.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 async def get_current_candidate(

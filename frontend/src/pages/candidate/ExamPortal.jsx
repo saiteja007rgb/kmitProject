@@ -494,6 +494,16 @@ export default function ExamPortal({ initialSession, onExit }) {
         </div>
       </div>
 
+      {/* Integrity Alert Banner */}
+      {violationCount > 0 && !submissionResult && (
+        <div className="w-full bg-rose-600 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 flex items-center justify-center space-x-2 shadow-sm animate-pulse">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-white" />
+          <span>
+            Integrity Alert: {violationCount} tab-switch event(s) recorded and logged for invigilator review. (Warning {violationCount} of 3)
+          </span>
+        </div>
+      )}
+
       {/* Main Examination Work Area */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Pane: Question & Options (8 cols) */}

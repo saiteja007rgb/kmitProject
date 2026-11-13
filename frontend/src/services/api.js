@@ -1,13 +1,19 @@
 import axios from 'axios';
 
+let activeBackendBase = '/api';
+const FALLBACK_BACKEND_URL = 'http://127.0.0.1:8002/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: activeBackendBase,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 api.interceptors.request.use((config) => {
+  if (activeBackendBase !== '/api') {
+    config.baseURL = activeBackendBase;
+  }
   const token = localStorage.getItem('exampulse_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -17,9 +23,19 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    // Test 1: Kill Server 1 Mid-Exam -> Seamless Failover to Backend 2 (8002)
+    const isNetworkOrProxyFailure = !error.response || [502, 503, 504].includes(error.response.status);
+    if (isNetworkOrProxyFailure && !originalRequest._retriedFailover) {
+      originalRequest._retriedFailover = true;
+      activeBackendBase = FALLBACK_BACKEND_URL;
+      originalRequest.baseURL = FALLBACK_BACKEND_URL;
+      return api(originalRequest);
+    }
+
     if (error.response && error.response.status === 401) {
-      // Clear token if unauthorized
+      // Clear token if unauthorized (e.g. dual session login on another device)
       localStorage.removeItem('exampulse_token');
       localStorage.removeItem('exampulse_user');
       if (window.location.pathname !== '/login') {

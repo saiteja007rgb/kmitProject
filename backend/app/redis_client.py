@@ -57,6 +57,23 @@ class RedisManager:
         except Exception as e:
             logger.error("Redis set_json error for %s: %s", key, str(e))
 
+    async def get_raw(self, key: str) -> Optional[str]:
+        if not self.client:
+            return None
+        try:
+            return await self.client.get(key)
+        except Exception as e:
+            logger.error("Redis get_raw error for %s: %s", key, str(e))
+            return None
+
+    async def set_raw(self, key: str, value: str, ttl: int = 86400):
+        if not self.client:
+            return
+        try:
+            await self.client.set(key, value, ex=ttl)
+        except Exception as e:
+            logger.error("Redis set_raw error for %s: %s", key, str(e))
+
     async def publish_event(self, channel: str, message: Dict[str, Any]):
         if not self.client:
             return
