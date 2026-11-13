@@ -118,6 +118,11 @@ async def test_durable_autosave_and_versioning(client):
     # Ensure clean state for this test session
     async with AsyncSessionLocal() as db:
         await db.execute(delete(Answer).where(Answer.session_id == session_id))
+        await db.execute(
+            update(ExaminationSession)
+            .where(ExaminationSession.id == session_id)
+            .values(status="in_progress", deadline=datetime.now(timezone.utc) + timedelta(seconds=3600), submitted_at=None)
+        )
         await db.commit()
 
     questions = (await client.get(f"/api/sessions/{session_id}/questions", headers=headers)).json()
@@ -183,7 +188,7 @@ async def test_server_authoritative_timer(client):
         await db.execute(
             update(ExaminationSession)
             .where(ExaminationSession.id == session_id)
-            .values(status="in_progress", submitted_at=None)
+            .values(status="in_progress", deadline=datetime.now(timezone.utc) + timedelta(seconds=3600), submitted_at=None)
         )
         await db.commit()
 
@@ -228,7 +233,7 @@ async def test_idempotent_final_submission_and_scoring(client):
         await db.execute(
             update(ExaminationSession)
             .where(ExaminationSession.id == session_id)
-            .values(status="in_progress", submitted_at=None)
+            .values(status="in_progress", deadline=datetime.now(timezone.utc) + timedelta(seconds=3600), submitted_at=None)
         )
         await db.commit()
 
