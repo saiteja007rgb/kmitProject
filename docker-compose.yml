@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: exampulse-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: exampulse
+      POSTGRES_USER: exampulse_user
+      POSTGRES_PASSWORD: secure_db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exampulse_user -d exampulse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: exampulse-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: exampulse-backend1
+    restart: always
+    environment:
+      INSTANCE_ID: "backend-1"
+      DATABASE_URL: "postgresql+asyncpg://exampulse_user:secure_db_password@postgres:5432/exampulse"
+      REDIS_URL: "redis://redis:6379/0"
+      JWT_SECRET: "exampulse_production_secret_key_2026"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  backend2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: exampulse-backend2
+    restart: always
+    environment:
+      INSTANCE_ID: "backend-2"
+      DATABASE_URL: "postgresql+asyncpg://exampulse_user:secure_db_password@postgres:5432/exampulse"
+      REDIS_URL: "redis://redis:6379/0"
+      JWT_SECRET: "exampulse_production_secret_key_2026"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: exampulse-frontend
+    restart: always
+    depends_on:
+      - backend1
+      - backend2
+
+  nginx:
+    image: nginx:alpine
+    container_name: exampulse-load-balancer
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend1
+      - backend2
+      - frontend
+
+volumes:
+  pgdata:
+

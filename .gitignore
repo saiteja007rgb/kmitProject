@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+*.db
+*.db-shm
+*.db-wal
+exampulse.db*
+
+# Node / Frontend
+frontend/node_modules/
+node_modules/
+frontend/dist/
+dist/
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment & Secrets
+.env
+
+# Logs
+*.log
+load_testing/reports/*.csv
+
+# OS & Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
