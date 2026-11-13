@@ -86,6 +86,21 @@ export const examAPI = {
     const res = await api.get(`/sessions/${sessionId}/submission`);
     return res.data;
   },
+  logViolation: async (sessionId, violationType, details = '') => {
+    const res = await api.post(`/sessions/${sessionId}/violations`, {
+      violation_type: violationType,
+      details,
+    });
+    return res.data;
+  },
+  getSolutionReview: async (sessionId) => {
+    const res = await api.get(`/sessions/${sessionId}/review`);
+    return res.data;
+  },
+  createExam: async (examData) => {
+    const res = await api.post('/exams', examData);
+    return res.data;
+  },
 };
 
 export const adminAPI = {

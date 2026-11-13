@@ -1,0 +1,967 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           ExamPulse — Complete Evaluator & Technical Reference Guide        ║
+║           Distributed Assessment Platform for KMIT Hackathon 2026           ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+This document assumes the reader knows nothing about this project.
+It explains every aspect: what it is, how to run it, what problems it solves,
+the technical architecture, every feature, and how to demonstrate it live.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1: WHAT IS EXAMPULSE?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ExamPulse is a fully self-hosted, distributed online examination platform
+designed to handle large-scale academic examinations reliably, fairly, and
+securely — even under real-world failure conditions like server crashes, network
+drops, or students trying to cheat.
+
+Think of it as a mini version of professional online exam systems (like those
+used for GATE, UPSC, or bank exams), but built entirely from scratch for this
+hackathon with open-source tools and zero paid APIs.
+
+KEY PROBLEMS IT SOLVES:
+1. Exams must remain fair even if one server crashes mid-exam
+2. Students who try to game the system (look up answers on another tab) must
+   be caught and penalized automatically
+3. Two students sitting next to each other must not get the same question order
+   (preventing copy-paste cheating)
+4. Answers must never be lost even if the student's browser crashes
+5. The timer must be enforced server-side — the student cannot manipulate it
+6. The invigilator must be able to watch everything in real-time from a
+   central dashboard
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2: HOW TO RUN THE PROJECT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+QUICK START (single command):
+  ./run_local.sh
+
+This script:
+  - Creates and activates a Python virtual environment
+  - Installs backend dependencies (FastAPI, SQLAlchemy, bcrypt, etc.)
+  - Installs frontend dependencies (React, Vite, Tailwind CSS)
+  - Starts Backend Instance 1 on port 8001
+  - Starts Backend Instance 2 on port 8002
+  - Starts the Vite development server on port 5173
+  - Opens the application in your browser
+
+MANUAL START (if run_local.sh fails):
+  Terminal 1 (Backend 1):
+    cd backend
+    python -m venv venv && source venv/bin/activate
+    pip install -r requirements.txt
+    INSTANCE_ID=backend-1 uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+  Terminal 2 (Backend 2):
+    source backend/venv/bin/activate
+    INSTANCE_ID=backend-2 uvicorn app.main:app --host 0.0.0.0 --port 8002
+
+  Terminal 3 (Frontend):
+    cd frontend
+    npm install
+    npm run dev -- --host 0.0.0.0 --port 5173
+
+ACCESSING THE APP:
+  Frontend:   http://localhost:5173
+  Backend 1:  http://localhost:8001  (or /api/* via Vite proxy)
+  Backend 2:  http://localhost:8002  (optional: load-balanced via Nginx)
+  API Docs:   http://localhost:8001/docs  (Swagger UI — full API documentation)
+
+DEMO ACCOUNTS (pre-seeded automatically on first start):
+  Admin:        username=admin          password=admin123
+  Invigilator:  username=invigilator   password=invigilator123
+  Candidates:   username=candidate_001 to candidate_100  password=password123
+
+RUNNING TESTS:
+  cd backend
+  source venv/bin/activate
+  pytest tests -v
+  → Expected: 8/8 tests pass in under 2 seconds
+
+BUILDING FOR PRODUCTION:
+  cd frontend && npm run build
+  → Outputs to frontend/dist/ (static files, serve via Nginx)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3: SYSTEM ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ASCII ARCHITECTURE DIAGRAM:
+
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                          STUDENT'S BROWSER                           │
+  │              React SPA (Vite · Tailwind CSS · Dark Mode)             │
+  │          Candidate Portal │ Invigilator Dashboard │ Login            │
+  └──────────────────────┬───────────────────────────┬───────────────────┘
+                         │ HTTP/REST (Axios)          │ WebSocket
+                         ▼                            ▼
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                      Vite Dev Server / Nginx                         │
+  │                    Reverse Proxy on port 5173                        │
+  │             /api/* → Backend 1 (port 8001)                           │
+  │             /ws/*  → Backend 1 (port 8001)                           │
+  └──────────────────────────────┬───────────────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────────┐
+              ▼                  ▼                       ▼
+  ┌─────────────────┐  ┌─────────────────┐   (Optional Nginx LB
+  │   FastAPI App   │  │   FastAPI App   │    distributes across
+  │  Backend-1:8001 │  │  Backend-2:8002 │    both instances)
+  │  (Uvicorn async)│  │  (Uvicorn async)│
+  └────────┬────────┘  └────────┬────────┘
+           │                    │
+           ▼                    ▼
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                      Shared Data Layer                               │
+  │                                                                      │
+  │  SQLite (local) / PostgreSQL (Docker)   Redis (Pub/Sub event bus)   │
+  │  ● Users      ● Questions               ● Real-time WS events       │
+  │  ● Sessions   ● Answers                 ● Cross-instance sync       │
+  │  ● Exams      ● Submissions             ● FakeRedis fallback         │
+  │  ● Proctoring Violations                  when Redis offline         │
+  └──────────────────────────────────────────────────────────────────────┘
+
+HOW MULTI-INSTANCE WORKS:
+  - Both backends share the same database (SQLite WAL mode for concurrent reads)
+  - Both backends share the same Redis channel for events
+  - When Backend-1 processes an answer save, it publishes an event to Redis
+  - Backend-2's WebSocket handler is subscribed to Redis and forwards the event
+    to invigilator dashboards connected to Backend-2
+  - This means invigilators connected to any backend instance see real-time
+    updates from candidates on any backend instance
+
+TECH STACK SUMMARY:
+  Backend:   Python 3.11+, FastAPI, SQLAlchemy (async), Uvicorn, bcrypt, JWT
+  Frontend:  React 18, Vite, Tailwind CSS, Axios, Lucide Icons
+  Database:  SQLite (development), PostgreSQL (production via Docker)
+  Messaging: Redis Pub/Sub (with FakeRedis fallback for offline testing)
+  Auth:      JWT (HMAC-SHA256), stateless tokens, role-based access control
+  CI/CD:     GitHub Actions (.github/workflows/ci.yml)
+  Containers: Docker + Docker Compose (optional, for PostgreSQL + Redis)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4: THE 5 CORE DISTRIBUTED SYSTEMS CHALLENGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CHALLENGE 1: SERVER-AUTHORITATIVE TIMER (Anti-cheat / Fairness)
+─────────────────────────────────────────────────────────────────
+Problem: If the timer runs in the browser (JavaScript), a student can open
+the browser DevTools and type "clearInterval(timerId)" to stop the countdown.
+They would then have infinite time for the exam. This is a critical fairness
+flaw in naive implementations.
+
+Our Solution: The timer is enforced entirely on the server.
+
+How it works:
+  1. When an exam is started, the backend records the EXACT deadline:
+       deadline = datetime.utcnow() + timedelta(minutes=exam.duration_minutes)
+     This timestamp is stored in the ExaminationSession database record.
+
+  2. Every time the frontend makes any API call (fetch questions, save answer,
+     check status), the backend calculates:
+       remaining_seconds = (session.deadline - datetime.utcnow()).total_seconds()
+     and sends this authoritative value back to the client.
+
+  3. The frontend displays whatever the server says. Even if the student
+     pauses their browser or manipulates the client-side timer, the next API
+     call will sync to the real server time.
+
+  4. When remaining_seconds <= 0, the backend automatically submits the exam
+     during any subsequent API call (enforced in the session status check).
+
+Code location: backend/app/services/exam_service.py → get_session_status()
+
+CHALLENGE 2: DETERMINISTIC QUESTION SHUFFLING (Anti-collusion)
+────────────────────────────────────────────────────────────────
+Problem: If every student sees questions in the same order, they can whisper
+"The answer to Q3 is B" to their neighbor. Classic problem in paper-based exams.
+
+Our Solution: Each student gets a personalized but deterministic shuffle.
+
+How it works:
+  1. We use the student's candidate_id (a UUID like "a3b8-...") combined with
+     the examination_id as a seed for Python's random number generator:
+       seed = hash(str(candidate_id) + str(examination_id))
+       rng = random.Random(seed)
+       shuffled_question_ids = rng.sample(all_question_ids, len(all_question_ids))
+
+  2. This shuffled order is stored as a JSON array in the session record
+     (session.question_order = ["qid-5", "qid-2", "qid-9", ...])
+
+  3. The order is DETERMINISTIC: if the student refreshes or reconnects,
+     they always get the same personalized order. No matter how many times
+     the student reloads, their Q1 is always their Q1.
+
+  4. No two students (with different candidate IDs) will see the same order.
+
+Result: Student A's Q3 ≠ Student B's Q3. Whispering answers is useless.
+
+Code location: backend/app/services/exam_service.py → start_exam()
+
+Test coverage: backend/tests/test_core_engine.py → test_deterministic_question_shuffling
+
+CHALLENGE 3: DURABLE AUTOSAVE WITH OPTIMISTIC CONCURRENCY CONTROL
+──────────────────────────────────────────────────────────────────
+Problem: If a student answers Q5 then immediately switches to Q6, two answer-
+save requests are in-flight simultaneously. If they arrive out of order
+(network jitter), Q6's save could be overwritten by a stale Q5 save.
+More critically, if the browser crashes or the network drops, the student's
+work must not be lost.
+
+Our Solution: Versioned answers with optimistic concurrency control.
+
+How it works:
+  1. Every answer record has a "version" integer (starts at 1, increments
+     with each edit).
+
+  2. The PUT /sessions/{session_id}/answers/{question_id} endpoint requires:
+       { selected_answer: "B", version: 3 }
+     The backend only accepts the update if the new version > the stored version:
+       if incoming_version <= stored_version:
+           raise HTTPException(409, "Stale update — newer version exists")
+
+  3. The frontend always sends the next expected version. If a request is
+     rejected (409 Conflict), it retries with the current version.
+
+  4. Answers are committed to the database immediately (not cached in memory),
+     so a server restart won't lose any saved answer.
+
+  5. The autosave indicator in the UI shows "Saving..." (yellow dot) → "Saved"
+     (green dot) or "Error — Retrying..." (red dot).
+
+Result: Browsers can crash and restart — all saved answers are recovered
+from the server on page reload.
+
+Code location: backend/app/routers/exams.py → save_answer()
+
+Test coverage: backend/tests/test_core_engine.py → test_durable_autosave_and_versioning
+
+CHALLENGE 4: REAL-TIME EVENT BUS (Cross-instance Communication)
+───────────────────────────────────────────────────────────────
+Problem: With two backend instances, a candidate might be connected to Backend-1
+while the invigilator's dashboard is connected to Backend-2. Backend-2 would
+never know when a candidate on Backend-1 submits their exam, so the dashboard
+would show stale data.
+
+Our Solution: Redis Publish/Subscribe as a distributed event bus.
+
+How it works:
+  1. When any significant event occurs (candidate starts, answer saved, submission,
+     proctoring violation), the backend publishes a JSON event to a Redis channel:
+       Channel: "exam:{examination_id}:events"
+       Message: {"type": "candidate_submitted", "candidate_code": "001", ...}
+
+  2. Each backend instance has a background task that subscribes to this Redis
+     channel and listens for events.
+
+  3. When an event arrives on the channel, the backend forwards it to all
+     currently connected WebSocket clients (invigilators watching the dashboard).
+
+  4. The WebSocket connection uses the native WebSocket protocol, not polling.
+     This means instant updates — sub-100ms latency.
+
+  5. FALLBACK: If Redis is not running, we use FakeRedis (an in-memory Python
+     library that behaves like Redis). This means the system works even without
+     Redis — but events only propagate within a single process, not across
+     multiple backend instances. The fallback is automatic and transparent.
+
+Code location:
+  backend/app/redis_client.py    → Redis/FakeRedis connection management
+  backend/app/routers/websockets.py → WebSocket handler + Redis subscription
+
+CHALLENGE 5: IDEMPOTENT SUBMISSION (Exactly-Once Semantics)
+─────────────────────────────────────────────────────────────
+Problem: What if a student clicks "Submit" and their network request times out?
+They click again. Now two submission requests are in-flight. Without protection,
+the exam could be submitted twice, potentially corrupting the score.
+
+Also: What if the exam timer fires on the server AND the student clicks Submit
+at the same moment? Both events try to create a Submission record simultaneously.
+
+Our Solution: Database-level idempotency using UNIQUE constraints.
+
+How it works:
+  1. The Submission table has a UNIQUE constraint on session_id.
+     CREATE UNIQUE INDEX ... ON submissions(session_id)
+
+  2. The submit endpoint uses INSERT OR IGNORE (or SQLAlchemy's equivalent):
+     - First call: Creates the submission, computes score, marks session as
+       "submitted". Returns the score.
+     - Second call: The INSERT fails silently (duplicate key). Returns the
+       existing submission record. Same score, no double-scoring.
+
+  3. The session status (ExaminationSession.status) transitions:
+       "not_started" → "active" → "submitted" (terminal, never changes again)
+     This state transition is protected by a database-level check.
+
+  4. Scoring is atomic: We read all answers, compute the score, and write the
+     Submission record in a single database transaction. It either fully succeeds
+     or fully rolls back. No partial scores.
+
+Code location: backend/app/services/exam_service.py → submit_exam_idempotent()
+
+Test coverage: backend/tests/test_core_engine.py → test_idempotent_final_submission_and_scoring
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5: ALL FEATURES EXPLAINED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FEATURE 1: JWT AUTHENTICATION & ROLE-BASED ACCESS CONTROL
+───────────────────────────────────────────────────────────
+What it is: Every user has a role (candidate, invigilator, or admin). The system
+enforces what each role can do — a candidate cannot access admin endpoints.
+
+How it works:
+  - On login, the backend creates a JWT (JSON Web Token). Think of this as a
+    tamper-proof digital badge that says "I am candidate_001 with role=candidate,
+    and this token expires in 24 hours."
+  - The token is signed with HMAC-SHA256 using a secret key on the server.
+    If anyone tampers with the token (e.g., changes role=candidate to role=admin),
+    the signature verification fails and the request is rejected.
+  - Tokens are STATELESS — the server doesn't need a session table or lookup.
+    It just verifies the signature cryptographically.
+  - Protected endpoints use FastAPI's dependency injection:
+      user = Depends(get_current_user)       # any authenticated user
+      user = Depends(require_roles("admin"))  # admin only
+
+Demo:
+  Try accessing http://localhost:8001/api/admin/exams/xxx/candidates without
+  a token → HTTP 401 Unauthorized
+  Try with a candidate token → HTTP 403 Forbidden
+  Try with an invigilator token → HTTP 200 OK
+
+FEATURE 2: SELF-REGISTRATION & SIGN-UP FLOW
+─────────────────────────────────────────────
+What it is: New users can register directly at the sign-up page without needing
+an admin to create their account manually.
+
+How it works:
+  - POST /api/auth/register accepts: username, password, display_name, role
+  - For candidate role: a Candidate profile is automatically created with a
+    generated candidate_code (e.g., "EXP-2026-0042")
+  - For invigilator/admin role: a staff authorization key is required to prevent
+    unauthorized privilege escalation. The key defaults to "admin123".
+  - After registration, the user can immediately log in.
+
+Security note: bcrypt with rounds=4 (fast enough for local testing; production
+would use 12) is used to hash passwords. Plain passwords are NEVER stored.
+
+FEATURE 3: EXAM LOBBY & REAL-TIME STATUS
+──────────────────────────────────────────
+What it is: Candidates see a list of available exams. They can see if the exam
+has started, their registration status, and start their session.
+
+How it works:
+  - GET /api/exams returns all available examinations with status
+  - Candidates are pre-registered (from seed data) or via registration
+  - An exam only becomes available after the invigilator starts it via
+    POST /api/exams/{examination_id}/start
+  - Once started, the candidate clicks "Start Exam" which calls
+    POST /api/exams/{examination_id}/start-session
+    This creates their ExaminationSession, generates their personal question
+    order (deterministic shuffle), and starts the server-side timer.
+
+FEATURE 4: LIVE EXAM PORTAL (Full-Screen Exam Experience)
+───────────────────────────────────────────────────────────
+What it is: The main exam interface where candidates answer questions.
+
+Components:
+  - Question pane (left, 8/12 columns):
+    Shows the current question with 4 MCQ options (A/B/C/D)
+    Clicking an option saves it immediately via autosave
+  - Question palette (right, 4/12 columns):
+    Shows a grid of numbered buttons (1-30 or however many questions)
+    Green = answered, Purple = marked for review, Gray = unanswered
+    Clicking any number jumps to that question instantly
+  - Timer (top right):
+    Shows MM:SS format. Turns red and pulses when < 5 minutes remain.
+    Server-synced — reflects server time, not browser time.
+  - Violation badge (top right, only if violations occurred):
+    Shows "X/3 Violations" in red when proctoring violations are detected.
+  - Autosave indicator (top left):
+    Shows "Saved ✓", "Saving...", or "Error — Retrying..." in real-time.
+  - Mark for Review:
+    Candidates can flag uncertain questions (shown in purple on palette)
+  - Submit button: Opens a confirmation modal with answer statistics.
+
+FEATURE 5: REAL-TIME ANTI-CHEAT & PROCTORING SUITE
+─────────────────────────────────────────────────────
+What it is: Automatic detection and enforcement system for tab switching.
+
+How it works:
+  1. DETECTION: Two browser events are monitored simultaneously:
+       document.addEventListener('visibilitychange', ...)
+         → Fires when the student switches to another browser tab
+       window.addEventListener('blur', ...)
+         → Fires when the student switches to another application
+
+  2. LOGGING: Every detected event calls POST /api/sessions/{id}/violations
+     with { violation_type: "tab_switch", details: "Browser event: tab_switch" }
+     The backend:
+       a. Creates a ProctoringViolation database record (audit trail)
+       b. Increments session.violation_count in the database
+       c. Publishes a "proctoring_violation" event to Redis (invigilator sees it)
+       d. Returns { violation_count: 1, max_violations: 3, auto_submitted: false }
+
+  3. WARNING MODAL: After each violation, a red modal pops up showing:
+     "Warning 2 of 3 — 1 warning remaining before automatic submission"
+     The student must click "I Understand — Resume Exam" to dismiss it.
+
+  4. AUTO-SUBMIT: When violation_count reaches 3, the backend automatically
+     calls submit_exam_idempotent() and sets auto_submitted: true in the
+     response. The frontend detects this, fetches the final submission record,
+     and displays the results screen with a banner:
+     "Your exam was automatically submitted due to exceeding 3 violations"
+
+  5. INVIGILATOR ALERT: The violation event is published to Redis, forwarded
+     to WebSocket clients, and displayed as a live alert banner in the
+     Invigilator Command Center dashboard.
+
+FEATURE 6: POST-EXAM SOLUTION REVIEW
+──────────────────────────────────────
+What it is: After submission, candidates can review every question with the
+correct answer highlighted, their selected answer highlighted (red if wrong),
+and an explanation for each question.
+
+How it works:
+  1. The results screen has two tabs:
+     - "Score Summary": Shows the total score, correct/incorrect/unanswered counts,
+       and a "View Detailed Solutions" button.
+     - "Review Answers": Shows each question with color-coded options.
+
+  2. The candidate clicks "View Detailed Solutions" or the "Review Answers" tab.
+     This calls GET /api/sessions/{session_id}/review
+
+  3. The backend:
+     a. Verifies the session belongs to this candidate
+     b. Checks session.status == "submitted" (solutions only shown after submission)
+     c. Fetches all questions, candidate's answers, and the submission record
+     d. For each question: computes is_correct, marks_earned, explanation
+     e. Returns the full breakdown as SolutionReviewResponse
+
+  4. The frontend renders each question card:
+     - Correct option: green border + green checkmark
+     - Student's wrong selection: red border + strikethrough
+     - Explanation: blue info box below the options
+
+FEATURE 7: INVIGILATOR COMMAND CENTER (Real-Time Dashboard)
+─────────────────────────────────────────────────────────────
+What it is: A live monitoring dashboard for exam supervisors showing every
+candidate's status in real-time.
+
+Tabs:
+  CANDIDATES TAB:
+    - Table with all registered candidates: name, candidate code, status
+      (not started / active / submitted), answered question count,
+      current score (live), and time remaining
+    - Search bar: filter by name or candidate code
+    - Status filter: show only "active" candidates
+    - Color-coded status badges
+
+  LEADERBOARD TAB:
+    - Live ranking of submitted candidates by score
+    - Shows rank #1, #2, #3... with score and submission time
+    - Updates automatically via WebSocket events
+
+  COLLUSION DETECTION TAB:
+    - Statistical analysis running server-side comparing answer patterns
+    - Flags pairs of candidates with suspiciously similar answers
+    - Shows the statistical evidence (Pearson correlation, identical answer count)
+    - Backend: GET /api/admin/exams/{id}/suspicious-activity
+
+REAL-TIME UPDATES:
+  - WebSocket connection to /ws/admin/exams/{examination_id}
+  - Every answer_saved, candidate_started, candidate_submitted, proctoring_violation
+    event triggers an instant dashboard refresh
+  - Green pulsing dot = connected; Amber dot = reconnecting (auto-reconnects every 3s)
+
+VIOLATION ALERTS:
+  - Live banner at top of dashboard showing recent violations
+  - Shows: candidate code, violation type, violation count (X/3), timestamp
+  - Keeps last 50 violations; has a "Clear" button
+
+FEATURE 8: ADMIN EXAM CREATOR
+───────────────────────────────
+What it is: Invigilators and admins can create new exams directly from the
+dashboard without touching the database or running SQL.
+
+How it works:
+  1. Click "Create Exam" button (top right of dashboard) → opens a 2-step modal
+
+  2. STEP 1 — EXAM DETAILS:
+     - Title (e.g., "Computer Networks Mid-Term")
+     - Description
+     - Duration in minutes
+     - Negative marking rate (e.g., 0.25 = 25% penalty for wrong answers)
+     - Click "Next: Add Questions →"
+
+  3. STEP 2 — QUESTIONS:
+     - For each question: enter question text, 4 options (A/B/C/D), select the
+       correct answer, set marks, optionally add an explanation
+     - "Add Another Question" button adds more questions
+     - Trash icon removes a question
+     - Click "Create Exam (N Q)" to submit
+
+  4. Backend: POST /api/exams with full payload. Creates the Examination record,
+     all Question records, and refreshes the exam list. Requires invigilator
+     or admin role (enforced server-side via JWT role check).
+
+FEATURE 9: DARK MODE
+─────────────────────
+What it is: The entire application supports a light/dark theme toggle that
+persists across browser sessions.
+
+How it works:
+  - React ThemeContext (frontend/src/context/ThemeContext.jsx) manages the theme
+  - On toggle: adds/removes the "dark" class on the <html> element
+  - localStorage.setItem("theme", "dark") persists the preference
+  - On load: reads localStorage, falls back to OS preference via
+    window.matchMedia("(prefers-color-scheme: dark)")
+  - ALL components use Tailwind's dark: prefix:
+      className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+  - Toggle button: sun ☀️ / moon 🌙 icon in the navigation bar
+
+FEATURE 10: COLLUSION DETECTION (Statistical Analysis)
+────────────────────────────────────────────────────────
+What it is: Automated statistical analysis that detects pairs of students who
+may have colluded (copied from each other).
+
+How it works:
+  1. The backend fetches all answer vectors for all candidates.
+     An answer vector is a list of choices for each question position, e.g.:
+     Candidate A: [A, B, C, A, D, ...] (in canonical question order)
+
+  2. For each pair of candidates, we compute:
+     - Number of IDENTICAL answers (same choice for same question)
+     - Pearson correlation coefficient of their answer patterns
+
+  3. A pair is flagged as suspicious if:
+     - Identical answer count > threshold (e.g., > 90% identical)
+     - Both have submitted (so we have complete answer vectors)
+
+  4. Results are returned as:
+     { candidate_a: "001", candidate_b: "007", evidence: { identical_count: 29,
+       total_questions: 30, correlation: 0.97 } }
+
+  5. IMPORTANT NOTE: Since question order is deterministic PER CANDIDATE,
+     question 1 for candidate A is a DIFFERENT question from question 1 for
+     candidate B. The comparison is done in canonical (original) question order,
+     not display order. So if A and B both guessed randomly, they would only
+     share ~25% of answers by chance (since there are 4 options). 90%+ identical
+     answers with personalized orders is statistically almost impossible without
+     collusion.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6: FILE STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ExamPulse/
+├── backend/
+│   ├── app/
+│   │   ├── main.py          ← FastAPI app entry point, DB init, lifespan
+│   │   ├── config.py        ← Settings (DATABASE_URL, JWT_SECRET, etc.)
+│   │   ├── models.py        ← SQLAlchemy ORM models (all database tables)
+│   │   ├── schemas.py       ← Pydantic models (request/response validation)
+│   │   ├── database.py      ← Async SQLAlchemy engine + session factory
+│   │   ├── seed.py          ← Seed data: admin, invigilator, 100 candidates
+│   │   ├── redis_client.py  ← Redis Pub/Sub with FakeRedis fallback
+│   │   ├── routers/
+│   │   │   ├── auth.py      ← Login, register endpoints
+│   │   │   ├── exams.py     ← Exam CRUD, session management, scoring, proctoring
+│   │   │   ├── admin.py     ← Invigilator dashboard data, collusion detection
+│   │   │   └── websockets.py← WebSocket endpoint + Redis subscription
+│   │   ├── services/
+│   │   │   └── exam_service.py ← Business logic (shuffle, timer, scoring)
+│   │   └── utils/
+│   │       ├── security.py  ← bcrypt, JWT encode/decode
+│   │       └── dependencies.py ← Reusable FastAPI dependencies
+│   ├── tests/
+│   │   ├── conftest.py      ← Test fixtures: fresh DB, seed, HTTP client
+│   │   ├── test_core_engine.py ← 7 core distributed systems tests
+│   │   └── test_collusion.py   ← 1 collusion detection test
+│   ├── requirements.txt     ← Python dependencies
+│   └── pytest.ini           ← Pytest configuration
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx           ← Root component, router, auth guard
+│   │   ├── context/
+│   │   │   ├── AuthContext.jsx  ← JWT token management, user state
+│   │   │   └── ThemeContext.jsx ← Dark/light mode toggle
+│   │   ├── pages/
+│   │   │   ├── candidate/
+│   │   │   │   ├── ExamPortal.jsx   ← Full exam UI + proctoring + solution review
+│   │   │   │   └── ExamLobby.jsx    ← Exam list + join button
+│   │   │   ├── invigilator/
+│   │   │   │   └── AdminDashboard.jsx ← Real-time monitoring + exam creator
+│   │   │   └── auth/
+│   │   │       ├── LoginPage.jsx    ← Login form
+│   │   │       └── RegisterPage.jsx ← Self-registration form
+│   │   └── services/
+│   │       └── api.js        ← Axios client + all API call helpers
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js        ← Dev proxy: /api → localhost:8001
+│   └── tailwind.config.js
+│
+├── .github/
+│   ├── workflows/
+│   │   └── ci.yml            ← CI: pytest + npm build on every push
+│   └── PULL_REQUEST_TEMPLATE.md
+├── run_local.sh              ← One-command local start script
+├── verify.sh                 ← Pre-commit verification script
+├── docker-compose.yml        ← PostgreSQL + Redis for production
+├── CONTRIBUTING.md           ← Git branch + PR guidelines
+└── EVALUATOR_GUIDE_COMPLETE.txt ← This document
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7: DATABASE SCHEMA (All Tables)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TABLE: users
+  id              UUID PRIMARY KEY
+  username        TEXT UNIQUE NOT NULL
+  password_hash   TEXT NOT NULL           ← bcrypt hash, never plain text
+  role            TEXT NOT NULL           ← "candidate", "invigilator", "admin"
+  created_at      TIMESTAMP
+
+TABLE: candidates
+  id              UUID PRIMARY KEY
+  user_id         UUID → users.id
+  candidate_code  TEXT UNIQUE             ← e.g., "EXP-2026-0042"
+  display_name    TEXT
+
+TABLE: examinations
+  id              UUID PRIMARY KEY
+  title           TEXT NOT NULL
+  description     TEXT
+  duration_minutes INTEGER NOT NULL
+  total_marks     FLOAT                   ← computed from questions
+  negative_marking_rate FLOAT             ← e.g., 0.25
+  status          TEXT                    ← "pending", "active", "completed"
+  created_by      UUID → users.id
+
+TABLE: questions
+  id              UUID PRIMARY KEY
+  examination_id  UUID → examinations.id
+  question_text   TEXT NOT NULL
+  options         JSON                    ← [{id: "A", text: "..."}, ...]
+  correct_answer  TEXT NOT NULL           ← "A", "B", "C", or "D"
+  marks           FLOAT DEFAULT 1.0
+  negative_marks  FLOAT DEFAULT 0.0
+  explanation     TEXT                    ← shown after submission
+
+TABLE: examination_sessions
+  id              UUID PRIMARY KEY
+  examination_id  UUID → examinations.id
+  candidate_id    UUID → candidates.id
+  status          TEXT                    ← "not_started", "active", "submitted", "expired"
+  question_order  JSON                    ← personalized shuffled question IDs
+  deadline        TIMESTAMP               ← absolute server-side deadline
+  violation_count INTEGER DEFAULT 0       ← proctoring violation counter
+
+TABLE: answers
+  id              UUID PRIMARY KEY
+  session_id      UUID → examination_sessions.id
+  question_id     UUID → questions.id
+  selected_answer TEXT                    ← "A", "B", "C", "D", or NULL
+  is_marked_for_review BOOLEAN
+  version         INTEGER                 ← optimistic concurrency control
+
+TABLE: submissions
+  id              UUID PRIMARY KEY
+  session_id      UUID UNIQUE             ← UNIQUE enforces idempotency
+  score           FLOAT
+  total_marks     FLOAT
+  correct_count   INTEGER
+  incorrect_count INTEGER
+  unanswered_count INTEGER
+  submitted_at    TIMESTAMP
+
+TABLE: proctoring_violations
+  id              UUID PRIMARY KEY
+  session_id      UUID → examination_sessions.id
+  violation_type  TEXT                    ← "tab_switch", "window_blur"
+  details         TEXT
+  timestamp       TIMESTAMP
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8: API REFERENCE (Key Endpoints)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Full interactive docs: http://localhost:8001/docs (Swagger UI)
+
+AUTH:
+  POST /api/auth/login         → { username, password } → { access_token, role, ... }
+  POST /api/auth/register      → { username, password, role, ... } → { access_token, ... }
+
+EXAMS:
+  GET  /api/exams              → List all exams (candidates see their registration status)
+  POST /api/exams              → Create exam (invigilator/admin only)
+  POST /api/exams/{id}/start   → Start exam (invigilator/admin only)
+  POST /api/exams/{id}/start-session → Candidate starts their session
+
+EXAM SESSION:
+  GET  /api/sessions/{id}                  → Session status + remaining_seconds
+  GET  /api/sessions/{id}/questions        → Personalized shuffled question list
+  GET  /api/sessions/{id}/answers          → All saved answers for this session
+  PUT  /api/sessions/{id}/answers/{qid}    → Save/update an answer (versioned)
+  POST /api/sessions/{id}/submit           → Submit exam (idempotent)
+  GET  /api/sessions/{id}/submission       → Get submission result + score
+  POST /api/sessions/{id}/violations       → Log proctoring violation
+  GET  /api/sessions/{id}/review           → Solution review (after submission only)
+
+ADMIN/INVIGILATOR:
+  GET  /api/admin/exams/{id}/overview       → Exam metrics (registered, active, submitted)
+  GET  /api/admin/exams/{id}/candidates     → All candidates with live status
+  GET  /api/admin/exams/{id}/leaderboard    → Ranked submitted candidates
+  GET  /api/admin/exams/{id}/suspicious-activity → Collusion detection results
+
+WEBSOCKET:
+  WS   /ws/admin/exams/{examination_id}    → Real-time event stream for dashboard
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 9: LIVE DEMO SCRIPT (Step-by-Step for Evaluators)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DEMO 1: BASIC EXAM FLOW (~5 minutes)
+  1. Open http://localhost:5173
+  2. Log in as candidate_001 / password123
+  3. See the exam lobby → click "Start Exam"
+  4. Watch the server-authoritative timer counting down (top right)
+  5. Answer a few questions — watch "Saving..." flash then "Saved ✓"
+  6. Mark a question for review → see it turn purple in the palette
+  7. Click Submit → review the confirmation modal
+  8. Confirm submit → see the results screen with score breakdown
+  9. Click "Review Answers" tab → see correct/wrong answers with explanations
+  10. Click "Return to Lobby"
+
+DEMO 2: PROCTORING SUITE (~3 minutes)
+  1. Log in as candidate_002 / password123
+  2. Start exam
+  3. Switch to another browser tab (or press Alt+Tab)
+  4. Come back — immediately see the red violation warning modal
+     "Warning 1 of 3 — 2 warnings remaining"
+  5. Click "I Understand — Resume Exam"
+  6. Repeat 2 more times (or just show the concept)
+  7. On the 3rd violation → exam auto-submits → results screen appears with
+     "automatically submitted due to exceeding maximum security violations"
+  (Tip: use incognito + regular window to show two candidates simultaneously)
+
+DEMO 3: REAL-TIME INVIGILATOR DASHBOARD (~3 minutes)
+  1. Open a NEW browser window/tab (or incognito)
+  2. Log in as invigilator / invigilator123
+  3. See the Invigilator Command Center with:
+     - All 100 candidates listed
+     - Real-time WebSocket connection (green pulsing dot = "Real-Time Bus Active")
+  4. Go back to your candidate window and answer a question
+  5. Watch the invigilator dashboard update in real-time (< 500ms)
+  6. Switch tabs as the candidate → watch the violation alert banner appear
+     on the invigilator dashboard instantly
+
+DEMO 4: CREATE A NEW EXAM (~3 minutes)
+  1. As invigilator, click "Create Exam" button (top right)
+  2. Fill in: Title = "DEMO Exam", Duration = 5 minutes, Negative Rate = 0.25
+  3. Click "Next: Add Questions"
+  4. Add 2-3 questions with options and explanations
+  5. Click "Create Exam (3 Q)"
+  6. See the new exam appear in the exam list (dashboard refreshes automatically)
+  7. As a candidate: log in and see the new exam in the lobby
+  8. Start the demo exam and answer it
+
+DEMO 5: COLLUSION DETECTION (~2 minutes)
+  1. As invigilator, click the "Collusion Detection" tab
+  2. See pairs of candidates flagged with their statistical evidence
+  3. Explain: "These two candidates answered 29/30 questions identically —
+     with personalized question orders, the chance of this by luck is ~0%"
+
+DEMO 6: DARK MODE (~30 seconds)
+  1. Click the ☀️/🌙 toggle in the top navigation bar
+  2. Watch the entire UI transition to dark mode
+  3. Reload the page — dark mode persists
+
+DEMO 7: MULTI-INSTANCE DISTRIBUTION (~2 minutes)
+  1. Open http://localhost:8001/health → see {"instance_id": "backend-1"}
+  2. Open http://localhost:8002/health → see {"instance_id": "backend-2"}
+  3. Explain: "Both instances share the same SQLite database (WAL mode allows
+     concurrent reads) and the same Redis event bus"
+  4. In production: Nginx would load-balance between them, candidates might
+     be on instance 1 while invigilator is on instance 2 — both see the same
+     real-time events via Redis Pub/Sub
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 10: TOP EVALUATOR QUESTIONS & ANSWERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Q1: "What if the server crashes mid-exam?"
+A: The SQLite database (in WAL mode) is ACID-compliant. All answers saved before
+   the crash are durable. When the server restarts, it reads the same DB file.
+   The candidate refreshes the page, their answers are restored from the DB,
+   and the timer resumes from the server-computed remaining time.
+
+Q2: "Can a student cheat by modifying the client-side timer?"
+A: No. The timer is authoritative on the server. The client only displays what
+   the server reports. If a student modifies the browser countdown, the NEXT
+   server call will return the real remaining_seconds value and correct the display.
+   When the deadline passes, the backend auto-submits during any subsequent request.
+
+Q3: "What if two students sit next to each other and whisper answers?"
+A: The answers won't help them. Each student has a personalized question order
+   based on their candidate ID + exam ID. Student A's Q5 is a completely
+   different question from Student B's Q5. So "Q5 is B" means nothing to the
+   neighbor whose Q5 is a different question entirely.
+
+Q4: "What if a student submits the form twice by double-clicking?"
+A: The Submission table has a UNIQUE constraint on session_id. The second INSERT
+   is rejected by the database (not an error — it returns the existing record).
+   The student sees the same correct score. Idempotency is guaranteed.
+
+Q5: "Is the communication encrypted?"
+A: In development (localhost), it uses HTTP/WS without TLS. In production,
+   you would add Nginx with an SSL certificate (Let's Encrypt is free), and
+   all traffic would be HTTPS/WSS. The JWT tokens themselves are signed
+   (tamper-proof) even over HTTP.
+
+Q6: "What database does it use? Can it scale?"
+A: Development: SQLite (file-based, zero config). SQLite in WAL mode supports
+   multiple concurrent readers and one writer — suitable for 100-200 concurrent
+   users. Production: PostgreSQL (configure via DATABASE_URL env variable and
+   docker-compose up). PostgreSQL handles thousands of concurrent connections.
+
+Q7: "What is Redis used for and what happens if it's down?"
+A: Redis is used for the WebSocket event bus — broadcasting events across
+   backend instances. If Redis is unavailable, the system falls back to FakeRedis
+   (in-memory, single-process). The exam still works fully; only cross-instance
+   WebSocket events are affected (they'd work within a single instance).
+
+Q8: "Can a student inspect the correct answers from the browser?"
+A: No. The correct_answer field is NEVER sent to the candidate during an active
+   exam. It's excluded from the GET /sessions/{id}/questions response. It is
+   only included in the GET /sessions/{id}/review response — which requires the
+   session to be in "submitted" state. So candidates cannot fetch answers during
+   the exam even with DevTools.
+
+Q9: "How does collusion detection work statistically?"
+A: We compare canonical answer vectors (not display-order vectors) between all
+   submitted pairs. With 4-option MCQs and randomized orders, the expected
+   identical-answer rate by chance is ~25%. We flag pairs with > 90% identical
+   answers. At 30 questions, the probability of 27+ matches by chance is
+   astronomically small (binomial distribution with p=0.25, k≥27, n=30).
+
+Q10: "What prevents a student from registering as an invigilator?"
+A: The registration endpoint checks the requested role. If role is "invigilator"
+   or "admin", it requires a valid ADMIN_SECRET key (defaults to "admin123",
+   configurable via environment variable). Without this key, registering as
+   staff returns HTTP 403. Candidates don't need a key.
+
+Q11: "Is there any CI/CD pipeline?"
+A: Yes. .github/workflows/ci.yml runs on every push and pull request:
+   - Installs Python dependencies and runs pytest (must be 8/8)
+   - Installs Node.js dependencies and runs npm run build (must succeed)
+   This prevents broken code from being merged.
+
+Q12: "What happens to answers if the network drops for 30 seconds?"
+A: The frontend shows "Retrying save..." in the autosave indicator. When
+   connectivity restores, the queued save request is retried. Answers already
+   saved before the drop are safe in the DB. The student's timer continues
+   counting down (client-side display) and will sync to server time on reconnect.
+
+Q13: "Can an invigilator see answers during the exam?"
+A: The admin dashboard shows candidate STATUS (answered count, time remaining)
+   but NOT the actual answer choices. This protects exam integrity. After the
+   exam, the invigilator can see scores but not individual answers.
+
+Q14: "Why use FastAPI instead of Django/Flask?"
+A: FastAPI is natively async, which is crucial for WebSockets and concurrent
+   database operations. It auto-generates OpenAPI/Swagger docs, has type-safe
+   request/response validation via Pydantic, and achieves near-Node.js performance.
+   It's the modern standard for Python API development.
+
+Q15: "How does the proctoring violation reach the invigilator in real-time?"
+A: 
+  Candidate tab-switches
+       ↓ (browser event)
+  Frontend calls POST /api/sessions/{id}/violations
+       ↓ (backend processes)
+  Backend saves ProctoringViolation to DB + increments violation_count
+       ↓ (Redis publish)
+  Redis channel "exam:{id}:events" receives event {type: "proctoring_violation", ...}
+       ↓ (WebSocket subscription)
+  Backend 1 & 2 both receive the event from Redis
+       ↓ (WebSocket send)
+  Invigilator's browser receives it via WebSocket
+       ↓ (React state update)
+  Violation alert banner appears on dashboard
+
+Total latency: typically < 200ms on local network.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 11: TEST COVERAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+8 automated tests cover the core distributed systems properties:
+
+TEST 1: test_auth_login
+  What it tests: JWT authentication, role extraction, invalid password rejection
+  Expected: 200 on valid login, 401 on wrong password
+
+TEST 2: test_auth_registration
+  What it tests: Self-registration flow, candidate profile creation, login after registration
+  Expected: New user can register and immediately log in
+
+TEST 3: test_deterministic_question_shuffling
+  What it tests: Two candidates with the same exam get DIFFERENT question orders,
+  but each candidate's order is STABLE across multiple requests
+  Expected: order_A ≠ order_B, order_A == order_A_refetch
+
+TEST 4: test_single_active_session_enforcement
+  What it tests: A candidate cannot have two active sessions simultaneously
+  Expected: Second start-session attempt returns 409 Conflict
+
+TEST 5: test_durable_autosave_and_versioning
+  What it tests: Answers are saved to DB with version tracking; stale updates rejected
+  Expected: Version N+1 accepted, version N rejected with 409
+
+TEST 6: test_server_authoritative_timer
+  What it tests: Timer is computed server-side; expired sessions auto-submit
+  Expected: Session with past deadline returns remaining_seconds ≤ 0
+
+TEST 7: test_idempotent_final_submission_and_scoring
+  What it tests: Submitting twice returns same score, no duplicate submission record
+  Expected: Second submit returns 200 with identical score data
+
+TEST 8: test_collusion_detection
+  What it tests: Candidates with identical answers are flagged; different answers not flagged
+  Expected: Matching pair appears in suspicious-activity results
+
+Run all tests: cd backend && source venv/bin/activate && pytest tests -v
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 12: KNOWN LIMITATIONS & FUTURE WORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Current limitations (acceptable for hackathon scope):
+  - No webcam/screen recording proctoring (only tab-switch detection)
+  - No question image support (text-only MCQs)
+  - SQLite WAL mode supports ~100-200 concurrent writers; use PostgreSQL for more
+  - No email notifications (would need SMTP integration)
+  - Collusion detection is O(n²) — scales to ~500 candidates before slowdown
+
+Production hardening needed before real use:
+  - Change JWT_SECRET, ADMIN_SECRET to strong random values
+  - Enable HTTPS with SSL certificate (Nginx + Let's Encrypt)
+  - Set bcrypt rounds back to 12 (or higher) for production passwords
+  - Add rate limiting on login endpoint (prevent brute force)
+  - Switch DATABASE_URL to PostgreSQL and use Alembic for migrations
+  - Add proper logging and monitoring (Sentry, Datadog, etc.)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END OF GUIDE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Built by: KMIT Hackathon 2026 Team
+GitHub:   https://github.com/saiteja007rgb/kmitProject
+Stack:    FastAPI + React + SQLAlchemy + Redis + Tailwind CSS
+License:  MIT
+

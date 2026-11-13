@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { adminAPI, examAPI } from '../../services/api';
 import {
   Users, CheckCircle2, Clock, AlertTriangle, ShieldAlert,
-  Trophy, RefreshCw, Radio, Search, Filter, Eye
+  Trophy, RefreshCw, Radio, Search, Filter, Eye,
+  PlusCircle, X, Trash2
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -16,6 +17,15 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [wsConnected, setWsConnected] = useState(false);
+  const [violations, setViolations] = useState([]); // { id, candidate_code, count, timestamp, type }
+  const [showExamCreator, setShowExamCreator] = useState(false);
+  const [creatorStep, setCreatorStep] = useState('meta'); // 'meta' | 'questions'
+  const [examMeta, setExamMeta] = useState({ title: '', description: '', duration_minutes: 60, negative_marking_rate: 0.25 });
+  const [examQuestions, setExamQuestions] = useState([
+    { question_text: '', options: [{ id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' }], correct_answer: 'A', marks: 1, negative_marks: 0.25, explanation: '' },
+  ]);
+  const [creatorSubmitting, setCreatorSubmitting] = useState(false);
+  const [creatorError, setCreatorError] = useState('');
 
   // 1. Fetch exams and initial data
   useEffect(() => {
@@ -82,6 +92,19 @@ export default function AdminDashboard() {
           if (['candidate_started', 'answer_saved', 'candidate_submitted'].includes(msg.type)) {
             refreshAllData(examId);
           }
+          // Proctoring violation event
+          if (msg.type === 'proctoring_violation') {
+            setViolations((prev) => [
+              {
+                id: Date.now(),
+                candidate_code: msg.candidate_code || 'Unknown',
+                count: msg.violation_count || 1,
+                type: msg.violation_type || 'tab_switch',
+                timestamp: new Date().toLocaleTimeString(),
+              },
+              ...prev.slice(0, 49), // keep last 50
+            ]);
+          }
         } catch (e) {
           // pong or non-json message
         }
@@ -120,6 +143,43 @@ export default function AdminDashboard() {
     return matchesSearch && matchesStatus;
   });
 
+  // Exam Creator helpers
+  const addQuestion = () => setExamQuestions((prev) => [
+    ...prev,
+    { question_text: '', options: [{ id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' }], correct_answer: 'A', marks: 1, negative_marks: 0.25, explanation: '' },
+  ]);
+  const removeQuestion = (idx) => setExamQuestions((prev) => prev.filter((_, i) => i !== idx));
+  const updateQuestion = (idx, field, val) => setExamQuestions((prev) => prev.map((q, i) => i === idx ? { ...q, [field]: val } : q));
+  const updateOption = (qIdx, optId, text) => setExamQuestions((prev) => prev.map((q, i) => i === qIdx ? { ...q, options: q.options.map((o) => o.id === optId ? { ...o, text } : o) } : q));
+
+  const handleCreateExam = async () => {
+    setCreatorSubmitting(true);
+    setCreatorError('');
+    try {
+      const payload = {
+        ...examMeta,
+        duration_minutes: Number(examMeta.duration_minutes),
+        negative_marking_rate: Number(examMeta.negative_marking_rate),
+        questions: examQuestions.map((q) => ({
+          question_text: q.question_text,
+          options: q.options,
+          correct_answer: q.correct_answer,
+          marks: Number(q.marks),
+          negative_marks: Number(q.negative_marks),
+          explanation: q.explanation || '',
+        })),
+      };
+      await examAPI.createExam(payload);
+      setShowExamCreator(false);
+      setCreatorStep('meta');
+      await refreshAllData(examId);
+    } catch (err) {
+      setCreatorError(err.response?.data?.detail || 'Failed to create exam. Check all fields.');
+    } finally {
+      setCreatorSubmitting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Top Header */}
@@ -141,14 +201,44 @@ export default function AdminDashboard() {
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{overview.title}</p>
         </div>
 
-        <button
-          onClick={() => refreshAllData(examId)}
-          className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs transition"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Snapshot</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => { setShowExamCreator(true); setCreatorStep('meta'); setCreatorError(''); }}
+            className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Create Exam</span>
+          </button>
+          <button
+            onClick={() => refreshAllData(examId)}
+            className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs transition"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
+
+      {/* Violation Alert Banner */}
+      {violations.length > 0 && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 animate-pulse" />
+              <span className="text-sm font-bold text-rose-700 dark:text-rose-300">Security Violations ({violations.length})</span>
+            </div>
+            <button onClick={() => setViolations([])} className="text-xs text-rose-500 hover:text-rose-700 dark:hover:text-rose-300">Clear</button>
+          </div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {violations.map((v) => (
+              <div key={v.id} className="flex items-center justify-between text-xs text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/40 rounded-lg px-3 py-1.5">
+                <span><strong>{v.candidate_code}</strong> — {v.type.replace('_', ' ')}</span>
+                <span className="text-rose-500 dark:text-rose-400">{v.count}/3 violations · {v.timestamp}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metrics Counters */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -441,6 +531,132 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
+        </div>
+      )}
+      {/* Exam Creator Modal */}
+      {showExamCreator && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Create New Exam</h2>
+              <button onClick={() => setShowExamCreator(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Step Tabs */}
+            <div className="flex border-b border-slate-100 dark:border-slate-800">
+              {['meta', 'questions'].map((step) => (
+                <button key={step} onClick={() => setCreatorStep(step)}
+                  className={`flex-1 py-3 text-sm font-semibold transition ${creatorStep === step ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {step === 'meta' ? '1. Exam Details' : '2. Questions'}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {creatorStep === 'meta' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Exam Title *</label>
+                    <input value={examMeta.title} onChange={(e) => setExamMeta((p) => ({ ...p, title: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="e.g. Computer Networks Mid-Term" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Description</label>
+                    <textarea value={examMeta.description} onChange={(e) => setExamMeta((p) => ({ ...p, description: e.target.value }))}
+                      rows={2} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                      placeholder="Brief description of this exam" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Duration (minutes) *</label>
+                      <input type="number" min="5" value={examMeta.duration_minutes} onChange={(e) => setExamMeta((p) => ({ ...p, duration_minutes: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Negative Marking Rate</label>
+                      <input type="number" min="0" max="1" step="0.25" value={examMeta.negative_marking_rate} onChange={(e) => setExamMeta((p) => ({ ...p, negative_marking_rate: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  </div>
+                  <button onClick={() => setCreatorStep('questions')}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition">
+                    Next: Add Questions →
+                  </button>
+                </>
+              )}
+
+              {creatorStep === 'questions' && (
+                <div className="space-y-5">
+                  {examQuestions.map((q, qIdx) => (
+                    <div key={qIdx} className="p-4 border border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800/60 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Question {qIdx + 1}</span>
+                        {examQuestions.length > 1 && (
+                          <button onClick={() => removeQuestion(qIdx)} className="text-rose-400 hover:text-rose-600 transition">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      <input value={q.question_text} onChange={(e) => updateQuestion(qIdx, 'question_text', e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Enter question text..." />
+                      <div className="grid grid-cols-2 gap-2">
+                        {q.options.map((opt) => (
+                          <div key={opt.id} className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 w-5">{opt.id}.</span>
+                            <input value={opt.text} onChange={(e) => updateOption(qIdx, opt.id, e.target.value)}
+                              className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              placeholder={`Option ${opt.id}`} />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-2">Correct:</label>
+                          <select value={q.correct_answer} onChange={(e) => updateQuestion(qIdx, 'correct_answer', e.target.value)}
+                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none">
+                            {q.options.map((o) => <option key={o.id} value={o.id}>{o.id}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1">Marks:</label>
+                          <input type="number" min="1" value={q.marks} onChange={(e) => updateQuestion(qIdx, 'marks', e.target.value)}
+                            className="w-14 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none" />
+                        </div>
+                      </div>
+                      <input value={q.explanation} onChange={(e) => updateQuestion(qIdx, 'explanation', e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Explanation (optional — shown to candidates after submission)" />
+                    </div>
+                  ))}
+                  <button onClick={addQuestion}
+                    className="w-full py-2 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl text-sm text-slate-500 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition">
+                    + Add Another Question
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {creatorStep === 'questions' && (
+              <div className="p-6 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                {creatorError && <p className="text-xs text-rose-600 dark:text-rose-400">{creatorError}</p>}
+                <div className="flex space-x-3">
+                  <button onClick={() => setCreatorStep('meta')} className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                    ← Back
+                  </button>
+                  <button onClick={handleCreateExam} disabled={creatorSubmitting}
+                    className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-50">
+                    {creatorSubmitting ? 'Creating...' : `Create Exam (${examQuestions.length} Q)`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

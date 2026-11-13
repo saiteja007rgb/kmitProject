@@ -82,6 +82,7 @@ class ExaminationSession(Base):
     deadline = Column(DateTime(timezone=True), nullable=False)  # Authoritative server deadline
     status = Column(String(20), default="in_progress")  # in_progress, submitted, expired
     question_order = Column(JSON, nullable=False)  # Array of question IDs in personalized order
+    violation_count = Column(Integer, default=0, nullable=False)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
@@ -93,6 +94,18 @@ class ExaminationSession(Base):
     examination = relationship("Examination", back_populates="sessions")
     answers = relationship("Answer", back_populates="session", cascade="all, delete-orphan")
     submission = relationship("Submission", back_populates="session", uselist=False, cascade="all, delete-orphan")
+    violations = relationship("ProctoringViolation", back_populates="session", cascade="all, delete-orphan")
+
+class ProctoringViolation(Base):
+    __tablename__ = "proctoring_violations"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    session_id = Column(String(36), ForeignKey("examination_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    violation_type = Column(String(50), nullable=False)  # tab_switch, window_blur
+    details = Column(String(255), nullable=True)
+    timestamp = Column(DateTime(timezone=True), default=utc_now)
+
+    session = relationship("ExaminationSession", back_populates="violations")
 
 class Answer(Base):
     __tablename__ = "answers"

@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any
 from app.config import settings
 
 def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt(rounds=12)
+    salt = bcrypt.gensalt(rounds=4)
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -64,6 +64,57 @@ class ExamStartResponse(BaseModel):
     status: str
     total_questions: int
 
+# --- Proctoring & Anti-Cheat Schemas ---
+class ViolationLogRequest(BaseModel):
+    violation_type: str = "tab_switch"
+    details: Optional[str] = None
+
+class ViolationLogResponse(BaseModel):
+    status: str = "logged"
+    violation_count: int
+    max_violations: int = 3
+    auto_submitted: bool = False
+    message: str
+
+# --- Solution & Review Schemas ---
+class SolutionQuestionItem(BaseModel):
+    id: str
+    order: int
+    question_text: str
+    options: List[QuestionOption]
+    selected_answer: Optional[str]
+    correct_answer: str
+    is_correct: bool
+    marks_earned: float
+    explanation: Optional[str] = None
+
+class SolutionReviewResponse(BaseModel):
+    session_id: str
+    examination_id: str
+    exam_title: str
+    score: float
+    total_marks: float
+    correct_count: int
+    incorrect_count: int
+    unanswered_count: int
+    questions: List[SolutionQuestionItem]
+
+# --- Exam & Question Authoring Schemas ---
+class QuestionCreateItem(BaseModel):
+    question_text: str
+    options: List[QuestionOption]
+    correct_answer: str
+    marks: float = 1.0
+    negative_marks: float = 0.0
+    explanation: Optional[str] = None
+
+class ExamCreateRequest(BaseModel):
+    title: str = Field(..., min_length=3, max_length=200)
+    description: Optional[str] = None
+    duration_minutes: int = Field(60, ge=1, le=360)
+    negative_marking: float = Field(0.0, ge=0.0, le=5.0)
+    questions: List[QuestionCreateItem] = Field(..., min_length=1)
+
 class SessionStatusResponse(BaseModel):
     session_id: str
     examination_id: str
