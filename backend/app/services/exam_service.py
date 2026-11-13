@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import random
 from datetime import datetime, timezone, timedelta
@@ -199,19 +200,30 @@ class ExamService:
             db.add(new_answer)
             final_answer = new_answer
 
-        # 5. Commit to PostgreSQL disk (ACID durability guarantee)
-        await db.commit()
-        await db.refresh(final_answer)
+        # 5. Commit with resilience retry under high concurrency
+        for attempt in range(5):
+            try:
+                await db.commit()
+                await db.refresh(final_answer)
+                break
+            except Exception as e:
+                if "locked" in str(e).lower() and attempt < 4:
+                    await asyncio.sleep(0.02 * (2 ** attempt))
+                else:
+                    raise
 
-        # 6. Publish event to Redis Pub/Sub for invigilator dashboard
-        await redis_manager.publish_event(f"exam:{session.examination_id}:events", {
-            "type": "answer_saved",
-            "candidate_code": candidate.candidate_code,
-            "question_id": question_id,
-            "is_marked": is_marked_for_review,
-            "has_answer": bool(selected_answer),
-            "updated_at": now.isoformat()
-        })
+        # 6. Publish event to Redis Pub/Sub asynchronously (non-blocking for high concurrency)
+        try:
+            asyncio.create_task(redis_manager.publish_event(f"exam:{session.examination_id}:events", {
+                "type": "answer_saved",
+                "candidate_code": candidate.candidate_code,
+                "question_id": question_id,
+                "is_marked": is_marked_for_review,
+                "has_answer": bool(selected_answer),
+                "updated_at": now.isoformat()
+            }))
+        except Exception:
+            pass
 
         return final_answer
 

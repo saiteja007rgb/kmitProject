@@ -246,3 +246,4 @@ def parse_uploaded_question_file(filename: str, content_bytes: bytes) -> List[Di
         # Default to txt parsing
         text = content_bytes.decode('utf-8', errors='replace')
         return parse_txt_question_paper(text)
+

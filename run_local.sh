@@ -13,14 +13,17 @@ echo "Launching 2 Stateless Backend Instances + React Frontend..."
 # Activate backend venv
 source backend/venv/bin/activate
 
+# Optimize system file descriptors for high concurrency (20,000+ simultaneous connections)
+ulimit -n 65535 2>/dev/null || true
+
 # 1. Start Backend Instance 1 on Port 8001
-echo "[1/3] Starting Backend Instance 1 on port 8001..."
-INSTANCE_ID=backend-1 uvicorn app.main:app --app-dir backend --host ${HOST:-127.0.0.1} --port 8001 --log-level info &
+echo "[1/3] Starting Backend Instance 1 on port 8001 (high concurrency enabled)..."
+INSTANCE_ID=backend-1 uvicorn app.main:app --app-dir backend --host ${HOST:-127.0.0.1} --port 8001 --limit-concurrency 25000 --backlog 65535 --timeout-keep-alive 30 --loop uvloop --log-level info &
 BACKEND1_PID=$!
 
 # 2. Start Backend Instance 2 on Port 8002
-echo "[2/3] Starting Backend Instance 2 on port 8002..."
-INSTANCE_ID=backend-2 uvicorn app.main:app --app-dir backend --host ${HOST:-127.0.0.1} --port 8002 --log-level info &
+echo "[2/3] Starting Backend Instance 2 on port 8002 (high concurrency enabled)..."
+INSTANCE_ID=backend-2 uvicorn app.main:app --app-dir backend --host ${HOST:-127.0.0.1} --port 8002 --limit-concurrency 25000 --backlog 65535 --timeout-keep-alive 30 --loop uvloop --log-level info &
 BACKEND2_PID=$!
 
 # 3. Start Frontend Dev Server on Port 5173
