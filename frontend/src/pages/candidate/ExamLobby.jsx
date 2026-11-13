@@ -55,8 +55,20 @@ export default function ExamLobby({ onStartExam }) {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="space-y-3 max-w-2xl">
                 <div className="flex items-center space-x-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                    Active Assessment
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                      exam.status === 'completed'
+                        ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                        : exam.status === 'scheduled' || exam.status === 'pending'
+                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                    }`}
+                  >
+                    {exam.status === 'completed'
+                      ? 'Completed'
+                      : exam.status === 'scheduled' || exam.status === 'pending'
+                      ? 'Scheduled'
+                      : 'Active Assessment'}
                   </span>
                   <span className="text-xs text-slate-400 dark:text-slate-500">ID: {exam.id.slice(0, 8)}...</span>
                 </div>

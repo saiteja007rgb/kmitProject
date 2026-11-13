@@ -53,6 +53,7 @@ async def get_overview(
     return InvigilatorOverview(
         examination_id=exam.id,
         title=exam.title,
+        status=exam.status or "active",
         total_registered=total_registered,
         active_count=active_count,
         submitted_count=submitted_count,

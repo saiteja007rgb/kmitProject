@@ -272,7 +272,10 @@ class ExamService:
         for q_id, q in q_map.items():
             chosen = candidate_answers.get(q_id)
             if chosen is not None and chosen.strip() != "":
-                if chosen.strip().upper() == q.correct_answer.strip().upper():
+                if q.question_type == "theory":
+                    correct_count += 1
+                    total_score += q.marks
+                elif chosen.strip().upper() == q.correct_answer.strip().upper():
                     correct_count += 1
                     total_score += q.marks
                 else:

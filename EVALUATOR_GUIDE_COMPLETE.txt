@@ -482,31 +482,46 @@ VIOLATION ALERTS:
   - Shows: candidate code, violation type, violation count (X/3), timestamp
   - Keeps last 50 violations; has a "Clear" button
 
-FEATURE 8: ADMIN EXAM CREATOR
-───────────────────────────────
-What it is: Invigilators and admins can create new exams directly from the
-dashboard without touching the database or running SQL.
+FEATURE 8: ADMIN EXAM CREATOR, THEORY EXAMS & QUESTION PAPER FILE IMPORT
+─────────────────────────────────────────────────────────────────────────────
+What it is: Invigilators and admins can create new examinations directly from the
+dashboard with support for both Objective (MCQ) and Descriptive (Theory) questions,
+or bulk import questions directly by uploading question papers in .txt, .xlsx, or .csv.
 
 How it works:
   1. Click "Create Exam" button (top right of dashboard) → opens a 2-step modal
 
   2. STEP 1 — EXAM DETAILS:
-     - Title (e.g., "Computer Networks Mid-Term")
-     - Description
+     - Title (e.g., "Distributed Systems & Theory Midterm")
+     - Description / Candidate instructions
      - Duration in minutes
-     - Negative marking rate (e.g., 0.25 = 25% penalty for wrong answers)
-     - Click "Next: Add Questions →"
+     - Negative marking rate (applicable to MCQs)
+     - Initial Exam Status (Active vs Scheduled)
+     - Click "Next: Author or Upload Questions →"
 
-  3. STEP 2 — QUESTIONS:
-     - For each question: enter question text, 4 options (A/B/C/D), select the
-       correct answer, set marks, optionally add an explanation
-     - "Add Another Question" button adds more questions
-     - Trash icon removes a question
-     - Click "Create Exam (N Q)" to submit
+  3. STEP 2 — QUESTIONS (Manual Authoring or File Upload):
+     - BULK FILE IMPORT:
+       Upload question papers in .txt, .xlsx (Excel), or .csv:
+       * For .txt: Detects numbered questions, options (A, B, C, D), correct keys,
+         marks, and automatically classifies questions without options as Theory.
+       * For .xlsx / .csv: Reads columns (Question, Type, Option A-D, Answer, Marks, Explanation).
+       * Parsed questions instantly populate the interactive question editor!
+     - THEORY & MCQ QUESTION BUILDER:
+       * Toggle each question between "Multiple Choice (MCQ)" and "Theory / Descriptive"
+       * Theory questions: candidates receive a full descriptive textarea with character
+         counter and zero-loss autosave; invigilators can define model answers/rubrics.
+       * MCQ questions: 4 options with single-click key assignment and negative marking.
+     - Click "Create Exam (N Q)" to finalize.
 
-  4. Backend: POST /api/exams with full payload. Creates the Examination record,
-     all Question records, and refreshes the exam list. Requires invigilator
-     or admin role (enforced server-side via JWT role check).
+FEATURE 9: ADMIN BATCH STATUS & MULTI-EXAM MANAGEMENT
+───────────────────────────────────────────────────────
+What it is: Real-time exam status badges and control in the Invigilator Command Center.
+
+How it works:
+  - Invigilators can see the live batch status badge (Active, Scheduled, Completed).
+  - One-click status actions: "Activate Exam" or "Mark Completed" (via PATCH /api/exams/{id}/status).
+  - Multi-exam batch selector: easily switch between different assessment batches in the dashboard.
+  - Broadcasts status update events via Redis Pub/Sub to all connected clients.
 
 FEATURE 9: DARK MODE
 ─────────────────────
@@ -901,7 +916,7 @@ Total latency: typically < 200ms on local network.
 SECTION 11: TEST COVERAGE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-8 automated tests cover the core distributed systems properties:
+10 automated tests cover the core distributed systems properties:
 
 TEST 1: test_auth_login
   What it tests: JWT authentication, role extraction, invalid password rejection
@@ -935,6 +950,14 @@ TEST 7: test_idempotent_final_submission_and_scoring
 TEST 8: test_collusion_detection
   What it tests: Candidates with identical answers are flagged; different answers not flagged
   Expected: Matching pair appears in suspicious-activity results
+
+TEST 9: test_theory_exam_creation_and_scoring
+  What it tests: End-to-end authoring, candidate text response autosave, and solution review for theory exams
+  Expected: Theory answers persist, evaluation succeeds, solutions display model rubrics
+
+TEST 10: test_question_paper_upload
+  What it tests: Bulk file parsing for .txt, .xlsx, and .csv question papers
+  Expected: Auto-classifies MCQs and Theory questions with marks and keys accurately
 
 Run all tests: cd backend && source venv/bin/activate && pytest tests -v
 

@@ -3,11 +3,13 @@ import { adminAPI, examAPI } from '../../services/api';
 import {
   Users, CheckCircle2, Clock, AlertTriangle, ShieldAlert,
   Trophy, RefreshCw, Radio, Search, Filter, Eye,
-  PlusCircle, X, Trash2
+  PlusCircle, X, Trash2, Upload, FileText, CheckSquare,
+  FileSpreadsheet, Play, CheckCheck
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [examId, setExamId] = useState(null);
+  const [examsList, setExamsList] = useState([]);
   const [overview, setOverview] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -18,11 +20,16 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [wsConnected, setWsConnected] = useState(false);
   const [violations, setViolations] = useState([]); // { id, candidate_code, count, timestamp, type }
+  const [statusUpdating, setStatusUpdating] = useState(false);
+
+  // Exam Creator state
   const [showExamCreator, setShowExamCreator] = useState(false);
   const [creatorStep, setCreatorStep] = useState('meta'); // 'meta' | 'questions'
-  const [examMeta, setExamMeta] = useState({ title: '', description: '', duration_minutes: 60, negative_marking_rate: 0.25 });
+  const [uploadingPaper, setUploadingPaper] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
+  const [examMeta, setExamMeta] = useState({ title: '', description: '', duration_minutes: 60, negative_marking_rate: 0.25, status: 'active' });
   const [examQuestions, setExamQuestions] = useState([
-    { question_text: '', options: [{ id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' }], correct_answer: 'A', marks: 1, negative_marks: 0.25, explanation: '' },
+    { question_text: '', question_type: 'mcq', options: [{ id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' }], correct_answer: 'A', marks: 1, negative_marks: 0.25, explanation: '' },
   ]);
   const [creatorSubmitting, setCreatorSubmitting] = useState(false);
   const [creatorError, setCreatorError] = useState('');
@@ -33,6 +40,7 @@ export default function AdminDashboard() {
       try {
         setLoading(true);
         const exams = await examAPI.listExams();
+        setExamsList(exams);
         if (exams.length > 0) {
           const currentExamId = exams[0].id;
           setExamId(currentExamId);
@@ -143,14 +151,116 @@ export default function AdminDashboard() {
     return matchesSearch && matchesStatus;
   });
 
+  // Toggle exam status
+  const handleToggleStatus = async (newStatus) => {
+    if (!examId) return;
+    setStatusUpdating(true);
+    try {
+      await examAPI.updateExamStatus(examId, newStatus);
+      await refreshAllData(examId);
+      const exams = await examAPI.listExams();
+      setExamsList(exams);
+    } catch (err) {
+      console.error('Failed to update exam status:', err);
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   // Exam Creator helpers
-  const addQuestion = () => setExamQuestions((prev) => [
-    ...prev,
-    { question_text: '', options: [{ id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' }], correct_answer: 'A', marks: 1, negative_marks: 0.25, explanation: '' },
-  ]);
+  const addQuestion = (type = 'mcq') => {
+    if (type === 'theory') {
+      setExamQuestions((prev) => [
+        ...prev,
+        {
+          question_text: '',
+          question_type: 'theory',
+          options: [],
+          correct_answer: '',
+          marks: 5,
+          negative_marks: 0,
+          explanation: '',
+        },
+      ]);
+    } else {
+      setExamQuestions((prev) => [
+        ...prev,
+        {
+          question_text: '',
+          question_type: 'mcq',
+          options: [
+            { id: 'A', text: '' },
+            { id: 'B', text: '' },
+            { id: 'C', text: '' },
+            { id: 'D', text: '' },
+          ],
+          correct_answer: 'A',
+          marks: 1,
+          negative_marks: 0.25,
+          explanation: '',
+        },
+      ]);
+    }
+  };
+
+  const toggleQuestionType = (idx, newType) => {
+    setExamQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== idx) return q;
+        if (newType === 'theory') {
+          return {
+            ...q,
+            question_type: 'theory',
+            options: [],
+            marks: q.marks === 1 ? 5 : q.marks,
+            negative_marks: 0,
+          };
+        } else {
+          return {
+            ...q,
+            question_type: 'mcq',
+            options:
+              q.options && q.options.length
+                ? q.options
+                : [
+                    { id: 'A', text: '' },
+                    { id: 'B', text: '' },
+                    { id: 'C', text: '' },
+                    { id: 'D', text: '' },
+                  ],
+            correct_answer:
+              q.correct_answer && q.correct_answer.length === 1 ? q.correct_answer : 'A',
+            marks: q.marks === 5 ? 1 : q.marks,
+            negative_marks: 0.25,
+          };
+        }
+      })
+    );
+  };
+
   const removeQuestion = (idx) => setExamQuestions((prev) => prev.filter((_, i) => i !== idx));
   const updateQuestion = (idx, field, val) => setExamQuestions((prev) => prev.map((q, i) => i === idx ? { ...q, [field]: val } : q));
   const updateOption = (qIdx, optId, text) => setExamQuestions((prev) => prev.map((q, i) => i === qIdx ? { ...q, options: q.options.map((o) => o.id === optId ? { ...o, text } : o) } : q));
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPaper(true);
+    setUploadMessage('');
+    setCreatorError('');
+    try {
+      const res = await examAPI.uploadQuestionPaper(file);
+      if (res.questions && res.questions.length > 0) {
+        setExamQuestions(res.questions);
+        setUploadMessage(`Imported ${res.total_detected} questions from ${file.name}`);
+      }
+    } catch (err) {
+      setCreatorError(err.response?.data?.detail || 'Failed to parse question paper. Please verify format.');
+    } finally {
+      setUploadingPaper(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   const handleCreateExam = async () => {
     setCreatorSubmitting(true);
@@ -160,19 +270,24 @@ export default function AdminDashboard() {
         ...examMeta,
         duration_minutes: Number(examMeta.duration_minutes),
         negative_marking_rate: Number(examMeta.negative_marking_rate),
+        status: examMeta.status || 'active',
         questions: examQuestions.map((q) => ({
           question_text: q.question_text,
-          options: q.options,
-          correct_answer: q.correct_answer,
+          question_type: q.question_type || 'mcq',
+          options: q.question_type === 'theory' ? [] : q.options,
+          correct_answer: q.correct_answer || '',
           marks: Number(q.marks),
-          negative_marks: Number(q.negative_marks),
+          negative_marks: q.question_type === 'theory' ? 0 : Number(q.negative_marks),
           explanation: q.explanation || '',
         })),
       };
-      await examAPI.createExam(payload);
+      const created = await examAPI.createExam(payload);
       setShowExamCreator(false);
       setCreatorStep('meta');
-      await refreshAllData(examId);
+      setExamId(created.id);
+      await refreshAllData(created.id);
+      const exams = await examAPI.listExams();
+      setExamsList(exams);
     } catch (err) {
       setCreatorError(err.response?.data?.detail || 'Failed to create exam. Check all fields.');
     } finally {
@@ -185,8 +300,10 @@ export default function AdminDashboard() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Invigilator Command Center</h1>
+            
+            {/* Real-Time Bus Status */}
             <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
               <span
                 className={`w-2 h-2 rounded-full ${
@@ -197,13 +314,84 @@ export default function AdminDashboard() {
                 {wsConnected ? 'Real-Time Bus Active' : 'Connecting Event Bus...'}
               </span>
             </div>
+
+            {/* Exam Batch Status Badge */}
+            <div className="flex items-center space-x-2">
+              <span
+                className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center space-x-1.5 border ${
+                  overview.status === 'completed'
+                    ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                    : overview.status === 'scheduled' || overview.status === 'pending'
+                    ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                    : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    overview.status === 'active'
+                      ? 'bg-emerald-500 animate-pulse'
+                      : overview.status === 'completed'
+                      ? 'bg-purple-500'
+                      : 'bg-amber-500'
+                  }`}
+                ></span>
+                <span className="capitalize">Batch Status: {overview.status || 'Active'}</span>
+              </span>
+
+              {/* Status Action Button */}
+              {overview.status === 'active' ? (
+                <button
+                  type="button"
+                  onClick={() => handleToggleStatus('completed')}
+                  disabled={statusUpdating}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/50 transition disabled:opacity-50"
+                  title="Mark this examination as completed"
+                >
+                  {statusUpdating ? 'Updating...' : 'Mark Completed'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleToggleStatus('active')}
+                  disabled={statusUpdating}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition disabled:opacity-50"
+                  title="Activate this examination"
+                >
+                  {statusUpdating ? 'Updating...' : 'Activate Exam'}
+                </button>
+              )}
+            </div>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{overview.title}</p>
+
+          <div className="flex items-center space-x-3 mt-2">
+            {examsList.length > 1 ? (
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Select Exam Batch:</span>
+                <select
+                  value={examId}
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    setExamId(newId);
+                    refreshAllData(newId);
+                  }}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none"
+                >
+                  {examsList.map((ex) => (
+                    <option key={ex.id} value={ex.id}>
+                      {ex.title} ({ex.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <p className="text-slate-500 dark:text-slate-400 text-sm">{overview.title}</p>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => { setShowExamCreator(true); setCreatorStep('meta'); setCreatorError(''); }}
+            onClick={() => { setShowExamCreator(true); setCreatorStep('meta'); setCreatorError(''); setUploadMessage(''); }}
             className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition"
           >
             <PlusCircle className="w-3.5 h-3.5" />
@@ -562,13 +750,13 @@ export default function AdminDashboard() {
                     <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Exam Title *</label>
                     <input value={examMeta.title} onChange={(e) => setExamMeta((p) => ({ ...p, title: e.target.value }))}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="e.g. Computer Networks Mid-Term" />
+                      placeholder="e.g. Distributed Systems & Database Architecture Midterm" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Description</label>
                     <textarea value={examMeta.description} onChange={(e) => setExamMeta((p) => ({ ...p, description: e.target.value }))}
                       rows={2} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                      placeholder="Brief description of this exam" />
+                      placeholder="Brief description or instructions for candidates" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -577,66 +765,226 @@ export default function AdminDashboard() {
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Negative Marking Rate</label>
+                      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Negative Marking Rate (MCQ)</label>
                       <input type="number" min="0" max="1" step="0.25" value={examMeta.negative_marking_rate} onChange={(e) => setExamMeta((p) => ({ ...p, negative_marking_rate: e.target.value }))}
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Initial Batch Status</label>
+                    <select
+                      value={examMeta.status || 'active'}
+                      onChange={(e) => setExamMeta((p) => ({ ...p, status: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="active">Active (Candidates can enter immediately)</option>
+                      <option value="scheduled">Scheduled / Pending (Invigilator must activate later)</option>
+                    </select>
+                  </div>
                   <button onClick={() => setCreatorStep('questions')}
                     className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition">
-                    Next: Add Questions →
+                    Next: Author or Upload Questions →
                   </button>
                 </>
               )}
 
               {creatorStep === 'questions' && (
                 <div className="space-y-5">
-                  {examQuestions.map((q, qIdx) => (
-                    <div key={qIdx} className="p-4 border border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800/60 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Question {qIdx + 1}</span>
-                        {examQuestions.length > 1 && (
-                          <button onClick={() => removeQuestion(qIdx)} className="text-rose-400 hover:text-rose-600 transition">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                  {/* Question Paper File Upload Dropzone */}
+                  <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-dashed border-indigo-200 dark:border-indigo-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center space-x-2">
+                        <Upload className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Import Question Paper (.txt, .xlsx, .csv)
+                        </span>
                       </div>
-                      <input value={q.question_text} onChange={(e) => updateQuestion(qIdx, 'question_text', e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Enter question text..." />
-                      <div className="grid grid-cols-2 gap-2">
-                        {q.options.map((opt) => (
-                          <div key={opt.id} className="flex items-center space-x-2">
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 w-5">{opt.id}.</span>
-                            <input value={opt.text} onChange={(e) => updateOption(qIdx, opt.id, e.target.value)}
-                              className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              placeholder={`Option ${opt.id}`} />
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div>
-                          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-2">Correct:</label>
-                          <select value={q.correct_answer} onChange={(e) => updateQuestion(qIdx, 'correct_answer', e.target.value)}
-                            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none">
-                            {q.options.map((o) => <option key={o.id} value={o.id}>{o.id}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1">Marks:</label>
-                          <input type="number" min="1" value={q.marks} onChange={(e) => updateQuestion(qIdx, 'marks', e.target.value)}
-                            className="w-14 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none" />
-                        </div>
-                      </div>
-                      <input value={q.explanation} onChange={(e) => updateQuestion(qIdx, 'explanation', e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Explanation (optional — shown to candidates after submission)" />
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Upload your question paper file to automatically parse and load MCQs and Theory questions.
+                      </p>
                     </div>
-                  ))}
-                  <button onClick={addQuestion}
-                    className="w-full py-2 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl text-sm text-slate-500 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition">
-                    + Add Another Question
-                  </button>
+
+                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition shrink-0 flex items-center space-x-1.5 shadow-sm">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{uploadingPaper ? 'Extracting Questions...' : 'Upload Question Paper'}</span>
+                      <input
+                        type="file"
+                        accept=".txt,.xlsx,.csv"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        disabled={uploadingPaper}
+                      />
+                    </label>
+                  </div>
+
+                  {uploadMessage && (
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs rounded-xl flex items-center space-x-2">
+                      <CheckCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{uploadMessage}</span>
+                    </div>
+                  )}
+
+                  {examQuestions.map((q, qIdx) => {
+                    const isTheory = q.question_type === 'theory';
+                    return (
+                      <div key={qIdx} className="p-4 border border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800/60 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Question {qIdx + 1}
+                            </span>
+                            {/* Question Type Toggle */}
+                            <div className="flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-700 text-[11px] font-semibold">
+                              <button
+                                type="button"
+                                onClick={() => toggleQuestionType(qIdx, 'mcq')}
+                                className={`px-2.5 py-0.5 rounded-md transition ${
+                                  !isTheory
+                                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                                }`}
+                              >
+                                Multiple Choice (MCQ)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleQuestionType(qIdx, 'theory')}
+                                className={`px-2.5 py-0.5 rounded-md transition ${
+                                  isTheory
+                                    ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-2xs font-bold'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                                }`}
+                              >
+                                Theory / Descriptive
+                              </button>
+                            </div>
+                          </div>
+
+                          {examQuestions.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeQuestion(qIdx)}
+                              className="text-rose-400 hover:text-rose-600 transition p-1"
+                              title="Delete question"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Question Text */}
+                        <input
+                          value={q.question_text}
+                          onChange={(e) => updateQuestion(qIdx, 'question_text', e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder={isTheory ? "Enter descriptive or theory question prompt..." : "Enter multiple choice question text..."}
+                        />
+
+                        {/* MCQ Options (Only for MCQ) */}
+                        {!isTheory && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {q.options && q.options.map((opt) => (
+                              <div key={opt.id} className="flex items-center space-x-2">
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 w-5">{opt.id}.</span>
+                                <input
+                                  value={opt.text}
+                                  onChange={(e) => updateOption(qIdx, opt.id, e.target.value)}
+                                  className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  placeholder={`Option ${opt.id}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Theory Model Answer / Rubric (Only for Theory) */}
+                        {isTheory && (
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                              Model Answer / Key Points / Evaluation Rubric (Optional):
+                            </label>
+                            <textarea
+                              value={q.correct_answer || ''}
+                              onChange={(e) => updateQuestion(qIdx, 'correct_answer', e.target.value)}
+                              rows={2}
+                              className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none font-sans"
+                              placeholder="Key concepts or sample reference solution shown to candidates after exam..."
+                            />
+                          </div>
+                        )}
+
+                        {/* Marks & Settings */}
+                        <div className="flex flex-wrap items-center gap-4">
+                          {!isTheory && (
+                            <div>
+                              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-2">Correct Key:</label>
+                              <select
+                                value={q.correct_answer || 'A'}
+                                onChange={(e) => updateQuestion(qIdx, 'correct_answer', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none"
+                              >
+                                {q.options && q.options.map((o) => <option key={o.id} value={o.id}>{o.id}</option>)}
+                              </select>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1.5">Marks:</label>
+                            <input
+                              type="number"
+                              min="0.5"
+                              step="0.5"
+                              value={q.marks}
+                              onChange={(e) => updateQuestion(qIdx, 'marks', e.target.value)}
+                              className="w-16 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none font-bold"
+                            />
+                          </div>
+
+                          {!isTheory && (
+                            <div>
+                              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1.5">Negative:</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.25"
+                                value={q.negative_marks}
+                                onChange={(e) => updateQuestion(qIdx, 'negative_marks', e.target.value)}
+                                className="w-16 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Explanation */}
+                        <input
+                          value={q.explanation || ''}
+                          onChange={(e) => updateQuestion(qIdx, 'explanation', e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Explanation / Solution rationale (shown to candidate in solutions review)"
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {/* Add Question Buttons */}
+                  <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => addQuestion('mcq')}
+                      className="w-full sm:flex-1 py-2.5 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition flex items-center justify-center space-x-1.5"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>Add Multiple Choice Question</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addQuestion('theory')}
+                      className="w-full sm:flex-1 py-2.5 border-2 border-dashed border-purple-300 dark:border-purple-800 rounded-xl text-xs font-semibold text-purple-700 dark:text-purple-300 hover:border-purple-500 transition flex items-center justify-center space-x-1.5"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>Add Theory / Descriptive Question</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

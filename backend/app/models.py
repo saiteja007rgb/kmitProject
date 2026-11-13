@@ -61,8 +61,8 @@ class Question(Base):
     examination_id = Column(String(36), ForeignKey("examinations.id", ondelete="CASCADE"), nullable=False, index=True)
     question_text = Column(Text, nullable=False)
     question_type = Column(String(20), default="mcq")
-    options = Column(JSON, nullable=False)  # [{"id": "A", "text": "Option A"}, ...]
-    correct_answer = Column(String(10), nullable=False)  # Master key - NEVER exposed to candidate
+    options = Column(JSON, nullable=True, default=list)  # [{"id": "A", "text": "Option A"}, ...]
+    correct_answer = Column(Text, nullable=True, default="")  # Master key or model answer for theory - NEVER exposed to candidate
     marks = Column(Float, default=1.0)
     negative_marks = Column(Float, default=0.0)
     order_index = Column(Integer, default=0)
@@ -113,7 +113,7 @@ class Answer(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     session_id = Column(String(36), ForeignKey("examination_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
     question_id = Column(String(36), ForeignKey("questions.id", ondelete="CASCADE"), nullable=False, index=True)
-    selected_answer = Column(String(50), nullable=True)
+    selected_answer = Column(Text, nullable=True)
     is_marked_for_review = Column(Boolean, default=False)
     version = Column(Integer, default=1, nullable=False)  # Optimistic concurrency / stale protection
     updated_at = Column(DateTime(timezone=True), default=utc_now)

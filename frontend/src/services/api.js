@@ -101,6 +101,20 @@ export const examAPI = {
     const res = await api.post('/exams', examData);
     return res.data;
   },
+  uploadQuestionPaper: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post('/exams/upload-questions', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
+  },
+  updateExamStatus: async (examId, status) => {
+    const res = await api.patch(`/exams/${examId}/status`, { status });
+    return res.data;
+  },
 };
 
 export const adminAPI = {

@@ -353,28 +353,50 @@ export default function ExamPortal({ initialSession, onExit }) {
                         <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                           <span className="text-slate-400 dark:text-slate-500 font-normal mr-1">Q{q.order}.</span>
                           {q.question_text}
+                          {q.question_type === 'theory' && (
+                            <span className="ml-2 text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+                              Theory
+                            </span>
+                          )}
                         </p>
                         <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-bold ${isCorrect ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : isUnanswered ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400' : 'bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300'}`}>
                           {isCorrect ? `+${q.marks_earned}` : isUnanswered ? '0' : `${q.marks_earned}`}
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {q.options.map((opt) => {
-                          const isUserChoice = opt.id === userAns;
-                          const isCorrectOpt = opt.id === correctAns;
-                          let cls = 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400';
-                          if (isCorrectOpt) cls = 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-semibold';
-                          else if (isUserChoice && !isCorrectOpt) cls = 'border-rose-400 dark:border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 line-through';
-                          return (
-                            <div key={opt.id} className={`flex items-center space-x-2 px-3 py-2 rounded-xl border text-xs ${cls}`}>
-                              <span className="font-bold w-5 shrink-0">{opt.id}</span>
-                              <span>{opt.text}</span>
-                              {isCorrectOpt && <CheckCircle className="w-3.5 h-3.5 ml-auto shrink-0 text-emerald-600 dark:text-emerald-400" />}
+                      {q.question_type === 'theory' ? (
+                        <div className="space-y-2 mt-2">
+                          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                            <span className="block text-xs font-semibold uppercase text-slate-400 dark:text-slate-500 mb-1">Your Submitted Answer:</span>
+                            <p className="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-wrap font-sans">
+                              {userAns || <span className="italic text-slate-400">No answer submitted</span>}
+                            </p>
+                          </div>
+                          {correctAns && (
+                            <div className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                              <span className="block text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-400 mb-1">Reference / Model Answer:</span>
+                              <p className="text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-wrap font-sans">{correctAns}</p>
                             </div>
-                          );
-                        })}
-                      </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {q.options && q.options.map((opt) => {
+                            const isUserChoice = opt.id === userAns;
+                            const isCorrectOpt = opt.id === correctAns;
+                            let cls = 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400';
+                            if (isCorrectOpt) cls = 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-semibold';
+                            else if (isUserChoice && !isCorrectOpt) cls = 'border-rose-400 dark:border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 line-through';
+                            return (
+                              <div key={opt.id} className={`flex items-center space-x-2 px-3 py-2 rounded-xl border text-xs ${cls}`}>
+                                <span className="font-bold w-5 shrink-0">{opt.id}</span>
+                                <span>{opt.text}</span>
+                                {isCorrectOpt && <CheckCircle className="w-3.5 h-3.5 ml-auto shrink-0 text-emerald-600 dark:text-emerald-400" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {q.explanation && (
                         <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900 rounded-xl">
@@ -478,44 +500,73 @@ export default function ExamPortal({ initialSession, onExit }) {
         <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 flex flex-col justify-between shadow-xs transition-colors">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">
-              <span className="text-xs uppercase font-bold tracking-wider px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400">
-                Question {currentIndex + 1} of {questions.length}
+              <div className="flex items-center space-x-2">
+                <span className="text-xs uppercase font-bold tracking-wider px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400">
+                  Question {currentIndex + 1} of {questions.length}
+                </span>
+                {currentQ.question_type === 'theory' ? (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                    Theory / Descriptive
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                    Multiple Choice
+                  </span>
+                )}
+              </div>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Marks: <strong>{currentQ.marks}</strong> {currentQ.question_type === 'theory' ? '' : '(Negative: -0.25)'}
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">Marks: <strong>{currentQ.marks}</strong> (Negative: -0.25)</span>
             </div>
 
             <h3 className="text-lg font-medium text-slate-900 dark:text-white leading-relaxed mb-6">
               {currentQ.question_text}
             </h3>
 
-            {/* MCQ Options list */}
-            <div className="space-y-3">
-              {currentQ.options &&
-                currentQ.options.map((opt) => {
-                  const isSelected = currentAnswerData.answer === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => handleSelectAnswer(opt.id)}
-                      className={`w-full text-left p-4 rounded-xl border text-sm transition flex items-start space-x-3.5 ${
-                        isSelected
-                          ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 font-medium ring-1 ring-indigo-600 shadow-xs'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
-                      }`}
-                    >
-                      <span
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 ${
-                          isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            {/* MCQ Options list OR Theory Text Input */}
+            {currentQ.question_type === 'theory' ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <span>Type your detailed answer below (autosaves automatically):</span>
+                  <span className="font-mono">{(currentAnswerData.answer || '').length} characters</span>
+                </div>
+                <textarea
+                  value={currentAnswerData.answer || ''}
+                  onChange={(e) => handleSelectAnswer(e.target.value)}
+                  rows={8}
+                  placeholder="Write your detailed explanation or answer here..."
+                  className="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm resize-y leading-relaxed shadow-2xs"
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {currentQ.options &&
+                  currentQ.options.map((opt) => {
+                    const isSelected = currentAnswerData.answer === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => handleSelectAnswer(opt.id)}
+                        className={`w-full text-left p-4 rounded-xl border text-sm transition flex items-start space-x-3.5 ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 font-medium ring-1 ring-indigo-600 shadow-xs'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
                         }`}
                       >
-                        {opt.id}
-                      </span>
-                      <span className="flex-1">{opt.text}</span>
-                    </button>
-                  );
-                })}
-            </div>
+                        <span
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 ${
+                            isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {opt.id}
+                        </span>
+                        <span className="flex-1">{opt.text}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
           </div>
 
           {/* Action Navigation Footer */}

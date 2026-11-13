@@ -38,8 +38,8 @@ class QuestionOption(BaseModel):
 class CandidateQuestion(BaseModel):
     id: str
     question_text: str
-    question_type: str
-    options: List[QuestionOption]
+    question_type: str = "mcq"
+    options: Optional[List[QuestionOption]] = []
     marks: float
     order: int
     # Note: correct_answer is strictly omitted!
@@ -81,11 +81,12 @@ class SolutionQuestionItem(BaseModel):
     id: str
     order: int
     question_text: str
-    options: List[QuestionOption]
-    selected_answer: Optional[str]
-    correct_answer: str
-    is_correct: bool
-    marks_earned: float
+    question_type: str = "mcq"
+    options: Optional[List[QuestionOption]] = []
+    selected_answer: Optional[str] = None
+    correct_answer: Optional[str] = ""
+    is_correct: bool = False
+    marks_earned: float = 0.0
     explanation: Optional[str] = None
 
 class SolutionReviewResponse(BaseModel):
@@ -102,8 +103,9 @@ class SolutionReviewResponse(BaseModel):
 # --- Exam & Question Authoring Schemas ---
 class QuestionCreateItem(BaseModel):
     question_text: str
-    options: List[QuestionOption]
-    correct_answer: str
+    question_type: str = "mcq"  # "mcq" or "theory"
+    options: Optional[List[QuestionOption]] = []
+    correct_answer: Optional[str] = ""
     marks: float = 1.0
     negative_marks: float = 0.0
     explanation: Optional[str] = None
@@ -113,7 +115,16 @@ class ExamCreateRequest(BaseModel):
     description: Optional[str] = None
     duration_minutes: int = Field(60, ge=1, le=360)
     negative_marking: float = Field(0.0, ge=0.0, le=5.0)
+    status: Optional[str] = "active"
     questions: List[QuestionCreateItem] = Field(..., min_length=1)
+
+class ExamStatusUpdateRequest(BaseModel):
+    status: str
+
+class QuestionParseResponse(BaseModel):
+    questions: List[QuestionCreateItem]
+    total_detected: int
+    message: str
 
 class SessionStatusResponse(BaseModel):
     session_id: str
@@ -163,6 +174,7 @@ class SubmitResponse(BaseModel):
 class InvigilatorOverview(BaseModel):
     examination_id: str
     title: str
+    status: str = "active"
     total_registered: int
     active_count: int
     submitted_count: int

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
@@ -11,11 +11,13 @@ from app.models import (
 from app.schemas import (
     ExamListItem, ExamStartResponse, SessionStatusResponse, CandidateQuestion,
     QuestionOption, ExamCreateRequest, ViolationLogRequest, ViolationLogResponse,
-    SolutionQuestionItem, SolutionReviewResponse
+    SolutionQuestionItem, SolutionReviewResponse, ExamStatusUpdateRequest,
+    QuestionParseResponse, QuestionCreateItem
 )
 from app.routers.deps import get_current_user, get_current_candidate, require_roles
 from app.services.exam_service import ExamService
 from app.redis_client import redis_manager
+from app.utils.file_parser import parse_uploaded_question_file
 
 router = APIRouter(prefix="/api", tags=["Examinations"])
 
@@ -59,19 +61,21 @@ async def create_exam(
         end_time=end_time,
         total_marks=total_marks,
         negative_mark_factor=req.negative_marking,
-        status="active"
+        status=req.status or "active"
     )
     db.add(exam)
     await db.flush()
 
     for idx, q_req in enumerate(req.questions):
+        q_type = q_req.question_type or "mcq"
         q = Question(
             examination_id=exam.id,
             question_text=q_req.question_text,
-            options=[opt.model_dump() for opt in q_req.options],
-            correct_answer=q_req.correct_answer.strip().upper(),
+            question_type=q_type,
+            options=[opt.model_dump() for opt in q_req.options] if q_req.options else [],
+            correct_answer=(q_req.correct_answer or "").strip(),
             marks=q_req.marks,
-            negative_marks=q_req.negative_marks or (q_req.marks * req.negative_marking),
+            negative_marks=0.0 if q_type == "theory" else (q_req.negative_marks or (q_req.marks * req.negative_marking)),
             order_index=idx,
             explanation=q_req.explanation
         )
@@ -79,6 +83,85 @@ async def create_exam(
 
     await db.commit()
     await db.refresh(exam)
+
+    return ExamListItem(
+        id=exam.id,
+        title=exam.title,
+        description=exam.description,
+        duration_seconds=exam.duration_seconds,
+        start_time=exam.start_time,
+        end_time=exam.end_time,
+        total_marks=exam.total_marks,
+        status=exam.status
+    )
+
+@router.post("/exams/upload-questions", response_model=QuestionParseResponse)
+async def upload_question_paper(
+    file: UploadFile = File(...),
+    user: User = Depends(require_roles("admin", "invigilator"))
+):
+    content = await file.read()
+    filename = file.filename or "question_paper.txt"
+    try:
+        parsed_list = parse_uploaded_question_file(filename, content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+
+    if not parsed_list:
+        raise HTTPException(
+            status_code=400,
+            detail="No questions could be extracted from the file. Please verify format (.txt with Q1./options or .xlsx/.csv with Question, Option A, Option B...)."
+        )
+
+    items = []
+    for q in parsed_list:
+        opts = [
+            QuestionOption(id=opt["id"], text=opt["text"])
+            for opt in q.get("options", [])
+        ]
+        items.append(QuestionCreateItem(
+            question_text=q["question_text"],
+            question_type=q.get("question_type", "mcq"),
+            options=opts,
+            correct_answer=q.get("correct_answer", ""),
+            marks=float(q.get("marks", 1.0)),
+            negative_marks=float(q.get("negative_marks", 0.0)),
+            explanation=q.get("explanation", "")
+        ))
+
+    return QuestionParseResponse(
+        questions=items,
+        total_detected=len(items),
+        message=f"Successfully extracted {len(items)} questions from '{filename}'"
+    )
+
+@router.patch("/exams/{exam_id}/status", response_model=ExamListItem)
+async def update_exam_status(
+    exam_id: str,
+    req: ExamStatusUpdateRequest,
+    user: User = Depends(require_roles("admin", "invigilator")),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Examination).where(Examination.id == exam_id))
+    exam = result.scalar_one_or_none()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    valid_statuses = ["active", "scheduled", "completed", "pending"]
+    if req.status.lower() not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Choose from: {valid_statuses}")
+
+    exam.status = req.status.lower()
+    await db.commit()
+    await db.refresh(exam)
+
+    # Broadcast event to Redis so invigilator and candidate dashboards update
+    await redis_manager.publish_event(f"exam:{exam.id}:events", {
+        "type": "exam_status_changed",
+        "examination_id": exam.id,
+        "status": exam.status,
+        "title": exam.title
+    })
 
     return ExamListItem(
         id=exam.id,
@@ -292,10 +375,19 @@ async def get_solution_review(
         is_corr = False
         earned = 0.0
 
-        if sel is None or str(sel).strip() == "":
+        if q.question_type == "theory":
+            if sel and str(sel).strip() != "":
+                is_corr = True
+                correct_count += 1
+                earned = q.marks
+                total_score += earned
+            else:
+                unanswered_count += 1
+                earned = 0.0
+        elif sel is None or str(sel).strip() == "":
             unanswered_count += 1
             earned = 0.0
-        elif str(sel).strip().upper() == q.correct_answer.strip().upper():
+        elif str(sel).strip().upper() == (q.correct_answer or "").strip().upper():
             is_corr = True
             correct_count += 1
             earned = q.marks
@@ -309,9 +401,10 @@ async def get_solution_review(
             id=q.id,
             order=idx + 1,
             question_text=q.question_text,
-            options=[QuestionOption(id=opt["id"], text=opt["text"]) for opt in q.options],
+            question_type=q.question_type or "mcq",
+            options=[QuestionOption(id=opt["id"], text=opt["text"]) for opt in q.options] if q.options else [],
             selected_answer=sel,
-            correct_answer=q.correct_answer,
+            correct_answer=q.correct_answer or "",
             is_correct=is_corr,
             marks_earned=earned,
             explanation=q.explanation
