@@ -4,9 +4,9 @@ ExamPulse High-Concurrency Benchmark & Stress Test
 Demonstrates the platform handling high-volume burst traffic (up to 20,000 requests).
 
 Usage:
-  python backend/tests/benchmark_concurrency.py [total_requests] [concurrency]
+  python backend/tests/benchmark_concurrency.py [total_requests] [concurrency] [target_url]
 Example:
-  python backend/tests/benchmark_concurrency.py 1000 100
+  python backend/tests/benchmark_concurrency.py 20000 500
 """
 
 import sys
@@ -14,37 +14,43 @@ import time
 import asyncio
 import httpx
 
-TARGET_URL = "http://127.0.0.1:8001/health"
-
-async def worker(client: httpx.AsyncClient, num_requests: int, results: list):
+async def worker(client: httpx.AsyncClient, target_url: str, num_requests: int, results: list, progress_counter: list, total_requests: int):
     for _ in range(num_requests):
         t0 = time.perf_counter()
         try:
-            resp = await client.get(TARGET_URL)
+            resp = await client.get(target_url)
             latency = (time.perf_counter() - t0) * 1000
             results.append((resp.status_code, latency))
-        except Exception as e:
+        except Exception:
             latency = (time.perf_counter() - t0) * 1000
             results.append((500, latency))
+        
+        progress_counter[0] += 1
+        current = progress_counter[0]
+        step = max(500, total_requests // 10)
+        if current % step == 0 or current == total_requests:
+            pct = (current / total_requests) * 100
+            print(f"   [Progress] {current:,} / {total_requests:,} requests completed ({pct:.0f}%)...")
 
-async def run_benchmark(total_requests: int = 1000, concurrency: int = 100):
+async def run_benchmark(total_requests: int = 20000, concurrency: int = 500, target_url: str = "http://127.0.0.1:8001/health"):
     print("=" * 65)
-    print(f"  EXAMPULSE HIGH-CONCURRENCY STRESS TEST")
-    print(f"  Target:      {TARGET_URL}")
+    print("  EXAMPULSE HIGH-CONCURRENCY STRESS TEST")
+    print(f"  Target:      {target_url}")
     print(f"  Total Req:   {total_requests:,}")
     print(f"  Concurrency: {concurrency:,} concurrent workers")
     print("=" * 65)
 
     req_per_worker = total_requests // concurrency
     results = []
+    progress_counter = [0]
 
-    limits = httpx.Limits(max_connections=concurrency + 50, max_keepalive_connections=concurrency)
+    limits = httpx.Limits(max_connections=concurrency + 100, max_keepalive_connections=concurrency)
     timeout = httpx.Timeout(30.0)
 
     start_time = time.perf_counter()
     async with httpx.AsyncClient(limits=limits, timeout=timeout) as client:
         tasks = [
-            asyncio.create_task(worker(client, req_per_worker, results))
+            asyncio.create_task(worker(client, target_url, req_per_worker, results, progress_counter, total_requests))
             for _ in range(concurrency)
         ]
         await asyncio.gather(*tasks)
@@ -73,7 +79,7 @@ async def run_benchmark(total_requests: int = 1000, concurrency: int = 100):
     print("=" * 65)
 
 if __name__ == "__main__":
-    total = int(sys.argv[1]) if len(sys.argv) > 1 else 1000
-    conc = int(sys.argv[2]) if len(sys.argv) > 2 else 100
-    asyncio.run(run_benchmark(total, conc))
-
+    total = int(sys.argv[1]) if len(sys.argv) > 1 else 20000
+    conc = int(sys.argv[2]) if len(sys.argv) > 2 else 500
+    url = sys.argv[3] if len(sys.argv) > 3 else "http://127.0.0.1:8001/health"
+    asyncio.run(run_benchmark(total, conc, url))
