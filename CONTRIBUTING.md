@@ -66,3 +66,4 @@ Verify your feature in the browser:
 2. Open a Pull Request against `main` on GitHub.
 3. GitHub Actions CI will automatically test your PR.
 4. Ensure all CI status checks turn green before merging.
+

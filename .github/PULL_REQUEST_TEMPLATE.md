@@ -26,3 +26,4 @@ Before requesting review or merging, ensure all the following pass:
 1. Run `./run_local.sh`
 2. Navigate to `http://localhost:5173`
 3. ...
+

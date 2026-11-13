@@ -210,39 +210,39 @@ export default function ExamPortal({ initialSession, onExit }) {
   if (submissionResult) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16">
-        <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center shadow-sm">
-          <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 sm:p-12 text-center shadow-sm transition-colors">
+          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <Award className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Examination Submitted!</h1>
-          <p className="text-slate-500 text-sm mb-8">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Examination Submitted!</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-8">
             Your answers have been securely recorded and evaluated by the server.
           </p>
 
-          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 mb-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 mb-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <span className="block text-xs uppercase font-semibold text-slate-400">Score</span>
-              <span className="text-2xl font-bold text-indigo-600">
+              <span className="block text-xs uppercase font-semibold text-slate-400 dark:text-slate-500">Score</span>
+              <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                 {submissionResult.score} / {submissionResult.total_marks}
               </span>
             </div>
             <div>
-              <span className="block text-xs uppercase font-semibold text-slate-400">Correct</span>
-              <span className="text-2xl font-bold text-emerald-600">{submissionResult.correct_count}</span>
+              <span className="block text-xs uppercase font-semibold text-slate-400 dark:text-slate-500">Correct</span>
+              <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{submissionResult.correct_count}</span>
             </div>
             <div>
-              <span className="block text-xs uppercase font-semibold text-slate-400">Incorrect</span>
-              <span className="text-2xl font-bold text-rose-500">{submissionResult.incorrect_count}</span>
+              <span className="block text-xs uppercase font-semibold text-slate-400 dark:text-slate-500">Incorrect</span>
+              <span className="text-2xl font-bold text-rose-500 dark:text-rose-400">{submissionResult.incorrect_count}</span>
             </div>
             <div>
-              <span className="block text-xs uppercase font-semibold text-slate-400">Unanswered</span>
-              <span className="text-2xl font-bold text-slate-600">{submissionResult.unanswered_count}</span>
+              <span className="block text-xs uppercase font-semibold text-slate-400 dark:text-slate-500">Unanswered</span>
+              <span className="text-2xl font-bold text-slate-600 dark:text-slate-300">{submissionResult.unanswered_count}</span>
             </div>
           </div>
 
           <button
             onClick={onExit}
-            className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm transition"
+            className="px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white font-medium text-sm transition"
           >
             Return to Lobby
           </button>
@@ -258,33 +258,33 @@ export default function ExamPortal({ initialSession, onExit }) {
   const unansweredCount = Math.max(0, questions.length - answeredCount);
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-slate-50">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors">
       {/* Top Authoritative Bar */}
-      <div className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-16 z-20 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-16 z-20 shadow-xs transition-colors">
         <div>
-          <h2 className="text-base font-bold text-slate-900">{session.title}</h2>
-          <span className="text-xs text-slate-500">Session ID: {session.session_id.slice(0, 8)}...</span>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">{session.title}</h2>
+          <span className="text-xs text-slate-500 dark:text-slate-400">Session ID: {session.session_id.slice(0, 8)}...</span>
         </div>
 
         <div className="flex items-center space-x-4">
           {/* Autosave Status Badge */}
-          <div className="flex items-center space-x-1.5 text-xs font-medium px-3 py-1 rounded-full bg-slate-100">
+          <div className="flex items-center space-x-1.5 text-xs font-medium px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
             {autosaveState === 'saving' && (
               <>
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></div>
-                <span className="text-amber-700">Saving...</span>
+                <span className="text-amber-700 dark:text-amber-400">Saving...</span>
               </>
             )}
             {autosaveState === 'saved' && (
               <>
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-emerald-700">Saved</span>
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                <span className="text-emerald-700 dark:text-emerald-400">Saved</span>
               </>
             )}
             {autosaveState === 'error' && (
               <>
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
-                <span className="text-rose-700">Retrying save...</span>
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+                <span className="text-rose-700 dark:text-rose-400">Retrying save...</span>
               </>
             )}
           </div>
@@ -293,11 +293,11 @@ export default function ExamPortal({ initialSession, onExit }) {
           <div
             className={`flex items-center space-x-2 font-mono text-sm font-bold px-3 py-1.5 rounded-xl border ${
               remainingSeconds !== null && remainingSeconds < 300
-                ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse'
-                : 'bg-slate-50 text-slate-800 border-slate-200'
+                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900 animate-pulse'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700'
             }`}
           >
-            <Clock className="w-4 h-4 text-indigo-500" />
+            <Clock className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
             <span>{formatTime(remainingSeconds)}</span>
           </div>
 
@@ -314,16 +314,16 @@ export default function ExamPortal({ initialSession, onExit }) {
       {/* Main Examination Work Area */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Pane: Question & Options (8 cols) */}
-        <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 flex flex-col justify-between shadow-xs">
+        <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 flex flex-col justify-between shadow-xs transition-colors">
           <div>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
-              <span className="text-xs uppercase font-bold tracking-wider px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">
+              <span className="text-xs uppercase font-bold tracking-wider px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400">
                 Question {currentIndex + 1} of {questions.length}
               </span>
-              <span className="text-xs text-slate-500">Marks: <strong>{currentQ.marks}</strong> (Negative: -0.25)</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">Marks: <strong>{currentQ.marks}</strong> (Negative: -0.25)</span>
             </div>
 
-            <h3 className="text-lg font-medium text-slate-900 leading-relaxed mb-6">
+            <h3 className="text-lg font-medium text-slate-900 dark:text-white leading-relaxed mb-6">
               {currentQ.question_text}
             </h3>
 
@@ -339,13 +339,13 @@ export default function ExamPortal({ initialSession, onExit }) {
                       onClick={() => handleSelectAnswer(opt.id)}
                       className={`w-full text-left p-4 rounded-xl border text-sm transition flex items-start space-x-3.5 ${
                         isSelected
-                          ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950 font-medium ring-1 ring-indigo-600 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700'
+                          ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 font-medium ring-1 ring-indigo-600 shadow-xs'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
                       }`}
                     >
                       <span
                         className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 ${
-                          isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                          isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                         }`}
                       >
                         {opt.id}
@@ -358,15 +358,15 @@ export default function ExamPortal({ initialSession, onExit }) {
           </div>
 
           {/* Action Navigation Footer */}
-          <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center space-x-2">
               <button
                 type="button"
                 onClick={handleToggleMark}
                 className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition ${
                   currentAnswerData.isMarked
-                    ? 'bg-purple-50 border-purple-300 text-purple-700'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    ? 'bg-purple-50 dark:bg-purple-950/50 border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300'
+                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
                 }`}
               >
                 <Flag className="w-3.5 h-3.5" />
@@ -377,7 +377,7 @@ export default function ExamPortal({ initialSession, onExit }) {
                 <button
                   type="button"
                   onClick={handleClearAnswer}
-                  className="inline-flex items-center space-x-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
+                  className="inline-flex items-center space-x-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Clear Selection</span>
@@ -390,7 +390,7 @@ export default function ExamPortal({ initialSession, onExit }) {
                 type="button"
                 disabled={currentIndex === 0}
                 onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                className="inline-flex items-center space-x-1 px-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition"
+                className="inline-flex items-center space-x-1 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 transition"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Previous</span>
@@ -400,7 +400,7 @@ export default function ExamPortal({ initialSession, onExit }) {
                 type="button"
                 disabled={currentIndex === questions.length - 1}
                 onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
-                className="inline-flex items-center space-x-1 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium disabled:opacity-40 transition"
+                className="inline-flex items-center space-x-1 px-4 py-2 rounded-xl bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white text-xs font-medium disabled:opacity-40 transition"
               >
                 <span>Next</span>
                 <ChevronRight className="w-4 h-4" />
@@ -411,22 +411,22 @@ export default function ExamPortal({ initialSession, onExit }) {
 
         {/* Right Pane: Question Palette (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-            <h4 className="text-sm font-bold text-slate-900 mb-4">Question Palette</h4>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs transition-colors">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Question Palette</h4>
 
             {/* Quick Summary Counts */}
             <div className="grid grid-cols-3 gap-2 mb-6 text-center text-xs">
-              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-100">
-                <span className="block text-emerald-800 font-bold text-base">{answeredCount}</span>
-                <span className="text-emerald-600 font-medium">Answered</span>
+              <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800">
+                <span className="block text-emerald-800 dark:text-emerald-300 font-bold text-base">{answeredCount}</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Answered</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="block text-slate-800 font-bold text-base">{unansweredCount}</span>
-                <span className="text-slate-500 font-medium">Unanswered</span>
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <span className="block text-slate-800 dark:text-slate-200 font-bold text-base">{unansweredCount}</span>
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Unanswered</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-100">
-                <span className="block text-purple-800 font-bold text-base">{markedCount}</span>
-                <span className="text-purple-600 font-medium">Marked</span>
+              <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-800">
+                <span className="block text-purple-800 dark:text-purple-300 font-bold text-base">{markedCount}</span>
+                <span className="text-purple-600 dark:text-purple-400 font-medium">Marked</span>
               </div>
             </div>
 
@@ -438,17 +438,17 @@ export default function ExamPortal({ initialSession, onExit }) {
                 const isMarked = ans && ans.isMarked;
                 const isCurrent = idx === currentIndex;
 
-                let btnClass = 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'; // Unanswered
+                let btnClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'; // Unanswered
                 if (hasAnswer && isMarked) {
-                  btnClass = 'bg-purple-600 border-purple-600 text-white font-bold ring-2 ring-purple-300';
+                  btnClass = 'bg-purple-600 border-purple-600 text-white font-bold ring-2 ring-purple-300 dark:ring-purple-700';
                 } else if (isMarked) {
-                  btnClass = 'bg-purple-100 border-purple-300 text-purple-800 font-semibold';
+                  btnClass = 'bg-purple-100 dark:bg-purple-900/60 border-purple-300 dark:border-purple-700 text-purple-800 dark:text-purple-200 font-semibold';
                 } else if (hasAnswer) {
                   btnClass = 'bg-emerald-600 border-emerald-600 text-white font-semibold';
                 }
 
                 if (isCurrent) {
-                  btnClass += ' ring-2 ring-indigo-600 ring-offset-2';
+                  btnClass += ' ring-2 ring-indigo-600 dark:ring-indigo-400 ring-offset-2 dark:ring-offset-slate-900';
                 }
 
                 return (
@@ -468,34 +468,34 @@ export default function ExamPortal({ initialSession, onExit }) {
 
       {/* Confirmation Submit Modal */}
       {showSubmitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-xl border border-slate-200">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Submit Examination?</h3>
-            <p className="text-slate-500 text-sm mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 dark:bg-black/70 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-xl border border-slate-200 dark:border-slate-800 transition-colors">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Submit Examination?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
               Please review your question progress before finalizing your submission:
             </p>
 
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2 mb-6 text-xs">
+            <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 space-y-2 mb-6 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-600">Total Questions:</span>
-                <span className="font-bold text-slate-800">{questions.length}</span>
+                <span className="text-slate-600 dark:text-slate-400">Total Questions:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{questions.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-emerald-700">Answered Questions:</span>
-                <span className="font-bold text-emerald-700">{answeredCount}</span>
+                <span className="text-emerald-700 dark:text-emerald-400">Answered Questions:</span>
+                <span className="font-bold text-emerald-700 dark:text-emerald-400">{answeredCount}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Unanswered Questions:</span>
-                <span className="font-bold text-slate-700">{unansweredCount}</span>
+                <span className="text-slate-500 dark:text-slate-400">Unanswered Questions:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{unansweredCount}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-purple-700">Marked for Review:</span>
-                <span className="font-bold text-purple-700">{markedCount}</span>
+                <span className="text-purple-700 dark:text-purple-400">Marked for Review:</span>
+                <span className="font-bold text-purple-700 dark:text-purple-400">{markedCount}</span>
               </div>
             </div>
 
             {errorMessage && (
-              <div className="mb-4 p-3 bg-rose-50 text-rose-700 text-xs rounded-xl border border-rose-200">
+              <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs rounded-xl border border-rose-200 dark:border-rose-900">
                 {errorMessage}
               </div>
             )}
@@ -504,7 +504,7 @@ export default function ExamPortal({ initialSession, onExit }) {
               <button
                 type="button"
                 onClick={() => setShowSubmitModal(false)}
-                className="w-1/2 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-medium text-xs hover:bg-slate-50 transition"
+                className="w-1/2 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition"
               >
                 Continue Exam
               </button>
