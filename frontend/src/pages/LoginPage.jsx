@@ -7,8 +7,8 @@ export default function LoginPage() {
   const [mode, setMode] = useState('login'); // 'login' or 'register'
 
   // Login form state
-  const [username, setUsername] = useState('candidate_001');
-  const [password, setPassword] = useState('password123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
 
   // Register form state
   const [regFullName, setRegFullName] = useState('');
@@ -52,12 +52,6 @@ export default function LoginPage() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleQuickFill = (u, p) => {
-    setMode('login');
-    setUsername(u);
-    setPassword(p);
   };
 
   return (
@@ -121,7 +115,7 @@ export default function LoginPage() {
                     onChange={(e) => setUsername(e.target.value)}
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm transition-colors"
-                    placeholder="e.g. candidate_001 or admin"
+                    placeholder="Enter your username"
                   />
                 </div>
 
@@ -268,35 +262,6 @@ export default function LoginPage() {
               </form>
             )}
 
-            {/* Quick-fill demo presets */}
-            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 text-center">
-                Instant Demo Access
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('candidate_001', 'password123')}
-                  className="p-2 text-xs font-medium rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 transition text-center"
-                >
-                  Candidate 1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('candidate_002', 'password123')}
-                  className="p-2 text-xs font-medium rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 transition text-center"
-                >
-                  Candidate 2
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('admin', 'admin123')}
-                  className="p-2 text-xs font-medium rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 transition text-center"
-                >
-                  Admin
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
