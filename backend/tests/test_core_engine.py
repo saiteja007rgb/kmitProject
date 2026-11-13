@@ -34,6 +34,57 @@ async def test_auth_login(client):
     assert admin_resp.json()["role"] == "admin"
 
 @pytest.mark.asyncio
+async def test_auth_registration(client):
+    import uuid
+    rand_suffix = str(uuid.uuid4())[:6]
+    test_user = f"reg_user_{rand_suffix}"
+    test_code = f"ROLL-{rand_suffix}"
+
+    # 1. Register candidate
+    reg_resp = await client.post("/api/auth/register", json={
+        "username": test_user,
+        "password": "mypassword123",
+        "display_name": "Test Student",
+        "candidate_code": test_code,
+        "role": "candidate"
+    })
+    assert reg_resp.status_code == 200
+    reg_data = reg_resp.json()
+    assert reg_data["role"] == "candidate"
+    assert reg_data["display_name"] == "Test Student"
+    assert "access_token" in reg_data
+
+    # 2. Duplicate username rejected
+    dup_resp = await client.post("/api/auth/register", json={
+        "username": test_user,
+        "password": "mypassword123",
+        "display_name": "Duplicate Student",
+        "role": "candidate"
+    })
+    assert dup_resp.status_code == 400
+
+    # 3. Staff registration with wrong secret rejected
+    bad_staff = await client.post("/api/auth/register", json={
+        "username": f"staff_{rand_suffix}",
+        "password": "staffpassword123",
+        "display_name": "Staff User",
+        "role": "invigilator",
+        "admin_secret": "wrongsecret"
+    })
+    assert bad_staff.status_code == 403
+
+    # 4. Staff registration with valid secret accepted
+    good_staff = await client.post("/api/auth/register", json={
+        "username": f"staff_{rand_suffix}",
+        "password": "staffpassword123",
+        "display_name": "Staff User",
+        "role": "invigilator",
+        "admin_secret": "admin123"
+    })
+    assert good_staff.status_code == 200
+    assert good_staff.json()["role"] == "invigilator"
+
+@pytest.mark.asyncio
 async def test_deterministic_question_shuffling(client):
     # Login candidate 1
     c1_login = await client.post("/api/auth/login", json={"username": "candidate_001", "password": "password123"})

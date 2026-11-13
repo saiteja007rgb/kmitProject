@@ -42,6 +42,21 @@ export const AuthProvider = ({ children }) => {
     return profile;
   };
 
+  const register = async (userData) => {
+    const data = await authAPI.register(userData);
+    localStorage.setItem('exampulse_token', data.access_token);
+    const profile = {
+      id: data.user_id,
+      username: userData.username,
+      role: data.role,
+      candidate_id: data.candidate_id,
+      display_name: data.display_name,
+    };
+    setUser(profile);
+    localStorage.setItem('exampulse_user', JSON.stringify(profile));
+    return profile;
+  };
+
   const logout = () => {
     localStorage.removeItem('exampulse_token');
     localStorage.removeItem('exampulse_user');
@@ -49,7 +64,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

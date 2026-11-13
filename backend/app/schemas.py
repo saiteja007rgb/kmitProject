@@ -7,6 +7,14 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6, max_length=100)
+    display_name: str = Field(..., min_length=2, max_length=100)
+    candidate_code: Optional[str] = Field(None, max_length=30)
+    role: str = "candidate"
+    admin_secret: Optional[str] = None
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
