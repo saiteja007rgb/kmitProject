@@ -1,313 +1,249 @@
-import asyncio
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import select
-from app.database import AsyncSessionLocal, engine, Base
-from app.models import User, Candidate, Examination, Question
-from app.utils.security import hash_password
+"""Initial bootstrap seeding.
 
-QUESTIONS_DATA = [
+Always creates the initial admin account (and default invigilator in non-production).
+Does NOT spam 100 random students: when `SEED_DEMO_DATA=true`, creates one small sample batch
+with 3 demo students enrolled in one multi-format sample exam (MCQ, multi-select, numeric,
+short-text, theory, and coding) so a fresh install is immediately testable while admins manage
+real students through the UI or CSV import.
+"""
+import asyncio
+import logging
+from datetime import timedelta
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
+
+from app.config import settings
+from app.core.clock import utc_now
+from app.core.security import hash_password
+from app.database import Base, SessionFactory, engine
+from app.models import Batch, Candidate, Enrollment, Exam, Question, User
+
+logger = logging.getLogger("exampulse.seed")
+
+SAMPLE_QUESTIONS = [
     {
-        "text": "In the CAP Theorem, which two properties can a distributed data store guarantee during an active network partition?",
+        "kind": "mcq_single",
+        "prompt": "In the CAP theorem, which two guarantees can a distributed datastore uphold during an active network partition?",
         "options": [
-            {"id": "A", "text": "Consistency and Partition Tolerance (CP)"},
-            {"id": "B", "text": "Availability and Consistency (AC)"},
-            {"id": "C", "text": "Availability and Durability (AD)"},
-            {"id": "D", "text": "Partition Tolerance and Linearity (PL)"}
+            {"id": "A", "text": "Consistency and Partition Tolerance (CP) or Availability and Partition Tolerance (AP)"},
+            {"id": "B", "text": "Consistency and Availability without Partition Tolerance"},
+            {"id": "C", "text": "Durability and Isolation only"},
+            {"id": "D", "text": "All three simultaneously without trade-offs"},
         ],
-        "correct": "A",
-        "explanation": "During a network partition (P), a distributed system must choose between Consistency (C) and Availability (A)."
+        "correct_answer": "A",
+        "marks": 2.0,
+        "negative_marks": 0.5,
+        "explanation": "During a partition, nodes must choose between refusing writes/reads (CP) or serving potentially stale data (AP).",
     },
     {
-        "text": "What is the primary benefit of making API endpoints idempotent when handling autosave requests?",
+        "kind": "mcq_multi",
+        "prompt": "Select all mechanisms that help protect an online assessment API against replay or duplicate writes.",
         "options": [
-            {"id": "A", "text": "It encrypts the payload in transit"},
-            {"id": "B", "text": "Repeated processing of duplicate requests yields the identical system state without corruption"},
-            {"id": "C", "text": "It completely bypasses disk persistence to save I/O cycles"},
-            {"id": "D", "text": "It speeds up client-side JavaScript execution"}
+            {"id": "A", "text": "Idempotent submission endpoints backed by a unique database constraint"},
+            {"id": "B", "text": "Monotonic per-question version numbers rejecting stale packets"},
+            {"id": "C", "text": "Storing JWTs in URL query strings for every REST call"},
+            {"id": "D", "text": "Rotating refresh tokens with reuse detection"},
         ],
-        "correct": "B",
-        "explanation": "Idempotent requests guarantee that network retries do not duplicate or corrupt data."
+        "correct_answer": ["A", "B", "D"],
+        "marks": 3.0,
+        "negative_marks": 0.5,
+        "explanation": "Idempotency, version checks, and refresh token rotation prevent duplicates and replay attacks; JWTs in REST URLs leak into logs.",
     },
     {
-        "text": "How does an atomic UPSERT (ON CONFLICT DO UPDATE) protect candidate answers during concurrent updates?",
+        "kind": "true_false",
+        "prompt": "Trusting the candidate browser's system clock (`Date.now()`) is sufficient to enforce an examination deadline.",
         "options": [
-            {"id": "A", "text": "It locks the entire database server in single-user mode"},
-            {"id": "B", "text": "It inserts a new record or updates existing in a single atomic database engine operation"},
-            {"id": "C", "text": "It caches the request in browser LocalStorage only"},
-            {"id": "D", "text": "It prevents the user from clicking the Next button"}
+            {"id": "T", "text": "True"},
+            {"id": "F", "text": "False"},
         ],
-        "correct": "B",
-        "explanation": "UPSERT atomically resolves duplicate primary/unique keys without throwing constraint violations."
+        "correct_answer": "F",
+        "marks": 1.0,
+        "negative_marks": 0.25,
+        "explanation": "Users can freely set their OS clock backwards; deadlines must always be verified against server UTC time.",
     },
     {
-        "text": "Why should session timers be server-authoritative rather than relying on browser system clocks?",
-        "options": [
-            {"id": "A", "text": "Client clocks can be easily tampered with, changed, or inaccurate"},
-            {"id": "B", "text": "Browsers do not support JavaScript timing functions"},
-            {"id": "C", "text": "Server clocks consume less network bandwidth"},
-            {"id": "D", "text": "It is required by HTTP/1.1 specification"}
-        ],
-        "correct": "A",
-        "explanation": "Server-authoritative timing prevents candidates from altering local system time to gain extra exam duration."
+        "kind": "numeric",
+        "prompt": "If a question has 4 choices (1 correct, 3 wrong), what is the probability (as a decimal to 3 decimal places) that two students guessing independently pick the exact same wrong choice on 3 consecutive questions? Use (1/3)^3.",
+        "options": [],
+        "correct_answer": "0.037",
+        "marks": 2.0,
+        "negative_marks": 0.0,
+        "numeric_tolerance": 0.002,
+        "explanation": "(1/3)^3 = 1/27 ≈ 0.0370.",
     },
     {
-        "text": "What data structure in Redis is optimal for maintaining an instantaneous, real-time leaderboard ranked by candidate score?",
-        "options": [
-            {"id": "A", "text": "HyperLogLog"},
-            {"id": "B", "text": "Sorted Set (ZSET)"},
-            {"id": "C", "text": "Bloom Filter"},
-            {"id": "D", "text": "Pub/Sub Channel"}
-        ],
-        "correct": "B",
-        "explanation": "Redis Sorted Sets (ZSET) maintain elements ordered by score with O(log N) insertion and range retrieval."
+        "kind": "short_text",
+        "prompt": "Which PostgreSQL / SQLite journaling mode allows concurrent readers to proceed without being blocked by an active writer?",
+        "options": [],
+        "correct_answer": "WAL",
+        "marks": 2.0,
+        "negative_marks": 0.0,
+        "explanation": "Write-Ahead Logging (WAL) separates writes from reads so readers do not block writers.",
     },
     {
-        "text": "In a multi-instance stateless backend architecture, how do backend instances share real-time WebSocket events?",
-        "options": [
-            {"id": "A", "text": "Through local Python global variables on each server"},
-            {"id": "B", "text": "Through a shared message broker like Redis Pub/Sub"},
-            {"id": "C", "text": "By writing temporary files to /tmp"},
-            {"id": "D", "text": "By having browsers connect to all backend servers simultaneously"}
-        ],
-        "correct": "B",
-        "explanation": "Redis Pub/Sub acts as an inter-instance message bus to distribute events across disparate server processes."
+        "kind": "theory",
+        "prompt": "Explain why bcrypt password hashing should be offloaded off an async Python web server's event loop, and what happens under high login concurrency if it is not.",
+        "options": [],
+        "correct_answer": None,
+        "marks": 5.0,
+        "negative_marks": 0.0,
+        "explanation": "bcrypt is intentionally CPU-bound (~150–300 ms at cost 12). Running it directly inside an async coroutine blocks the entire event loop, stalling all other HTTP and WebSocket connections on that worker. Running it via asyncio.to_thread keeps the loop responsive.",
     },
     {
-        "text": "What does optimistic concurrency control using a version counter achieve in answer autosave?",
-        "options": [
-            {"id": "A", "text": "Compresses answers before transmission"},
-            {"id": "B", "text": "Ensures older, delayed network requests do not overwrite newer candidate answers"},
-            {"id": "C", "text": "Allows candidates to inspect correct answers"},
-            {"id": "D", "text": "Forces the browser to reload the page"}
-        ],
-        "correct": "B",
-        "explanation": "Checking version >= incoming_version rejects out-of-order network packets."
+        "kind": "coding",
+        "prompt": "Given two space-separated integers A and B on standard input, print their sum (A + B) on standard output.\n\nConstraints: -10^9 <= A, B <= 10^9.",
+        "options": [],
+        "correct_answer": None,
+        "marks": 10.0,
+        "negative_marks": 0.0,
+        "explanation": "Read two 64-bit integers from stdin and print their sum.",
+        "coding": {
+            "languages": ["python", "c", "cpp", "java", "javascript"],
+            "starter_code": {
+                "python": "a, b = map(int, input().split())\nprint(a + b)\n",
+                "c": "#include <stdio.h>\nint main(void) {\n    long long a, b;\n    if (scanf(\"%lld %lld\", &a, &b) == 2) printf(\"%lld\\n\", a + b);\n    return 0;\n}\n",
+                "cpp": "#include <iostream>\nusing namespace std;\nint main() {\n    long long a, b;\n    if (cin >> a >> b) cout << (a + b) << '\\n';\n    return 0;\n}\n",
+                "java": "import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        System.out.println(sc.nextLong() + sc.nextLong());\n    }\n}\n",
+                "javascript": "const fs = require('fs');\nconst [a, b] = fs.readFileSync(0, 'utf8').trim().split(/\\s+/).map(BigInt);\nconsole.log((a + b).toString());\n",
+            },
+            "time_limit_ms": 2000,
+            "memory_limit_mb": 256,
+            "sample_tests": [
+                {"input": "3 5\n", "expected_output": "8\n"},
+                {"input": "-10 4\n", "expected_output": "-6\n"},
+            ],
+            "hidden_tests": [
+                {"input": "0 0\n", "expected_output": "0\n"},
+                {"input": "1000000000 1000000000\n", "expected_output": "2000000000\n"},
+                {"input": "-999999999 999999999\n", "expected_output": "0\n"},
+            ],
+        },
     },
-    {
-        "text": "Which HTTP status code is most appropriate when a candidate attempts to save an answer after the exam deadline has elapsed?",
-        "options": [
-            {"id": "A", "text": "200 OK"},
-            {"id": "B", "text": "301 Moved Permanently"},
-            {"id": "C", "text": "403 Forbidden"},
-            {"id": "D", "text": "502 Bad Gateway"}
-        ],
-        "correct": "C",
-        "explanation": "403 Forbidden indicates the server understands the request but refuses to authorize it due to expired deadline."
-    },
-    {
-        "text": "What is the primary purpose of SQLite's Write-Ahead Logging (WAL) mode in high-concurrency local environments?",
-        "options": [
-            {"id": "A", "text": "Allows readers to read while writers write without blocking each other"},
-            {"id": "B", "text": "Deletes the database file after every query"},
-            {"id": "C", "text": "Disables ACID transactions completely"},
-            {"id": "D", "text": "Limits the database to 10 rows"}
-        ],
-        "correct": "A",
-        "explanation": "WAL mode decouples readers and writers, permitting concurrent reads without locking against active writes."
-    },
-    {
-        "text": "In collusion detection, why is high similarity on INCORRECT answers a stronger cheating signal than similarity on correct answers?",
-        "options": [
-            {"id": "A", "text": "Correct answers are universally common; choosing the exact same unusual distractor has low independent probability"},
-            {"id": "B", "text": "Incorrect answers are always flagged by the compiler"},
-            {"id": "C", "text": "Candidates are not allowed to submit incorrect answers"},
-            {"id": "D", "text": "It is mathematically impossible to guess a correct answer"}
-        ],
-        "correct": "A",
-        "explanation": "Two candidates sharing the exact same non-intuitive incorrect choices is strong statistical evidence of collusion."
-    },
-    {
-        "text": "What prevents duplicate final submissions when a candidate accidentally double-clicks the Submit button?",
-        "options": [
-            {"id": "A", "text": "Browser CSS styling"},
-            {"id": "B", "text": "Database transaction locking and checking if session.status == 'submitted'"},
-            {"id": "C", "text": "Turning off the server connection"},
-            {"id": "D", "text": "Locust load testing"}
-        ],
-        "correct": "B",
-        "explanation": "Database transactions with idempotency guards return existing submission records on duplicate requests."
-    },
-    {
-        "text": "Why must correct answers never be returned in the candidate's question payload?",
-        "options": [
-            {"id": "A", "text": "To reduce network JSON payload by 2 bytes"},
-            {"id": "B", "text": "A candidate could inspect browser developer tools or network responses to see the answer key"},
-            {"id": "C", "text": "JSON does not support string fields"},
-            {"id": "D", "text": "The database cannot store correct answers"}
-        ],
-        "correct": "B",
-        "explanation": "Client-side payloads must strictly omit solution keys to prevent trivial source inspection cheating."
-    },
-    {
-        "text": "How does deterministic question shuffling benefit assessment integrity?",
-        "options": [
-            {"id": "A", "text": "Candidates adjacent to each other see different question orders, while reconnects restore the same sequence"},
-            {"id": "B", "text": "It changes questions on every second"},
-            {"id": "C", "text": "It translates questions to Latin"},
-            {"id": "D", "text": "It generates random mathematical numbers"}
-        ],
-        "correct": "A",
-        "explanation": "Deterministic shuffling uses a candidate-specific seed to prevent screen-peeking while maintaining session consistency."
-    },
-    {
-        "text": "What does ACID durability guarantee in database systems?",
-        "options": [
-            {"id": "A", "text": "Once a transaction is committed, its changes survive crashes and power loss on non-volatile storage"},
-            {"id": "B", "text": "Queries execute in under 1 nanosecond"},
-            {"id": "C", "text": "Passwords are automatically reset every week"},
-            {"id": "D", "text": "Data is duplicated on 100 cloud regions"}
-        ],
-        "correct": "A",
-        "explanation": "Durability ensures committed data is safely written to disk and recoverable upon restart."
-    },
-    {
-        "text": "What is the primary function of a reverse proxy like Nginx in front of FastAPI application servers?",
-        "options": [
-            {"id": "A", "text": "Distribute traffic evenly (Load Balancing), manage SSL termination, and buffer slow clients"},
-            {"id": "B", "text": "Run unit tests automatically"},
-            {"id": "C", "text": "Execute Python scripts natively"},
-            {"id": "D", "text": "Generate frontend React JSX code"}
-        ],
-        "correct": "A",
-        "explanation": "Reverse proxies efficiently distribute load and protect internal application services."
-    },
-    {
-        "text": "Which data metric is most critical when measuring high-load API performance during examination spikes?",
-        "options": [
-            {"id": "A", "text": "95th/99th percentile latency and error rate under concurrency"},
-            {"id": "B", "text": "Average latency only"},
-            {"id": "C", "text": "Lines of code in the backend"},
-            {"id": "D", "text": "The color scheme of the terminal"}
-        ],
-        "correct": "A",
-        "explanation": "p95/p99 tail latencies reveal system bottlenecks that averages mask."
-    },
-    {
-        "text": "Why should password hashes use algorithms with work factors (like bcrypt or Argon2) instead of raw MD5 or SHA-256?",
-        "options": [
-            {"id": "A", "text": "They include salts and deliberate computational cost to resist brute-force and rainbow table attacks"},
-            {"id": "B", "text": "They produce shorter hashes"},
-            {"id": "C", "text": "They are reversible without a key"},
-            {"id": "D", "text": "They run faster on GPUs"}
-        ],
-        "correct": "A",
-        "explanation": "Bcrypt's adaptive work factor defends against hardware-accelerated password cracking."
-    },
-    {
-        "text": "In database design, what does a UNIQUE(candidate_id, examination_id) constraint enforce?",
-        "options": [
-            {"id": "A", "text": "A candidate can register for an exam, but never submit it"},
-            {"id": "B", "text": "Only a single active examination session can exist per candidate per exam, preventing concurrent multi-device sessions"},
-            {"id": "C", "text": "The candidate's score must be unique across all students"},
-            {"id": "D", "text": "The question order is reversed"}
-        ],
-        "correct": "B",
-        "explanation": "Composite unique constraints enforce the single active session rule at the database schema level."
-    },
-    {
-        "text": "What role does Jaccard similarity play in comparing candidate answer profiles?",
-        "options": [
-            {"id": "A", "text": "Measures the intersection over the union of matching answer attributes between two candidates"},
-            {"id": "B", "text": "Calculates the candidate's typing speed"},
-            {"id": "C", "text": "Determines the candidate's geographic IP address"},
-            {"id": "D", "text": "Predicts future exam grades"}
-        ],
-        "correct": "A",
-        "explanation": "Jaccard coefficient evaluates the proportion of overlapping choices between two sets of responses."
-    },
-    {
-        "text": "What is the recommended behavior when a candidate's internet connection drops while selecting an answer?",
-        "options": [
-            {"id": "A", "text": "Immediately crash the browser and fail the exam"},
-            {"id": "B", "text": "Preserve changes in a local pending queue, show 'Retrying...', and sync with server once connection returns"},
-            {"id": "C", "text": "Show 'Saved' immediately even though server hasn't acknowledged"},
-            {"id": "D", "text": "Reset all previous answers"}
-        ],
-        "correct": "B",
-        "explanation": "A resilient UI retains pending answers, displays honest connection status, and reconciles upon reconnection."
-    }
 ]
 
-async def seed_database():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
-    async with AsyncSessionLocal() as session:
-        # Check if already seeded
-        res = await session.execute(select(User).where(User.username == "admin"))
-        if res.scalar_one_or_none():
-            print("Database already seeded. Skipping.")
+async def seed_database() -> None:
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+    except (OperationalError, ProgrammingError) as exc:
+        if "already exists" not in str(exc).lower():
+            raise
+
+    async with SessionFactory() as db:
+        existing_admin = (await db.execute(select(User).where(User.username == "admin"))).scalar_one_or_none()
+        if existing_admin is not None:
             return
 
-        print("Seeding database with Admin, Invigilator, 100 Candidates, and Examination...")
+        logger.info("Bootstrapping initial ExamPulse accounts...")
+        try:
+            await _insert_initial_data(db)
+        except IntegrityError:
+            # Another backend replica seeded concurrently.
+            await db.rollback()
+            logger.info("Seed already completed by another instance.")
 
-        # 1. Admin & Invigilator Users
-        admin_user = User(
-            username="admin",
-            password_hash=hash_password("admin123"),
-            role="admin"
+
+async def _insert_initial_data(db) -> None:
+    admin = User(
+        username="admin",
+        password_hash=await hash_password(settings.initial_admin_password),
+        role="admin",
+        full_name="System Administrator",
+        email="admin@exampulse.local",
+        must_change_password=False,
+    )
+    invigilator = User(
+        username="invigilator",
+        password_hash=await hash_password("invigilator123"),
+        role="invigilator",
+        full_name="Lead Invigilator",
+        email="invigilator@exampulse.local",
+        must_change_password=False,
+    )
+    db.add_all([admin, invigilator])
+    await db.flush()
+
+    if not settings.seed_demo_data:
+        await db.commit()
+        return
+
+    batch = Batch(name="CSE-2026", description="Sample cohort for evaluation")
+    db.add(batch)
+    await db.flush()
+
+    demo_students = [
+        ("student1", "Arjun Mehta", "arjun.mehta@example.edu", "KMIT-001"),
+        ("student2", "Priya Nair", "priya.nair@example.edu", "KMIT-002"),
+        ("student3", "Rohan Das", "rohan.das@example.edu", "KMIT-003"),
+    ]
+    demo_password_hash = await hash_password("password123")
+    created_candidates: list[Candidate] = []
+    for username, full_name, email, code in demo_students:
+        user = User(
+            username=username,
+            password_hash=demo_password_hash,
+            role="candidate",
+            full_name=full_name,
+            email=email,
+            must_change_password=False,
         )
-        invigilator_user = User(
-            username="invigilator",
-            password_hash=hash_password("invigilator123"),
-            role="invigilator"
+        db.add(user)
+        await db.flush()
+        candidate = Candidate(user_id=user.id, candidate_code=code, batch_id=batch.id)
+        db.add(candidate)
+        await db.flush()
+        created_candidates.append(candidate)
+
+    now = utc_now()
+    exam = Exam(
+        title="CS201: Systems & Programming Assessment",
+        description="Sample live exam covering MCQ, multi-select, numeric, short answer, theory, and sandboxed coding.",
+        instructions=(
+            "1. Keep your camera on and stay in fullscreen mode for the entire exam.\n"
+            "2. Answers are automatically saved to the server.\n"
+            "3. Coding solutions are evaluated against sample and hidden test cases."
+        ),
+        starts_at=now - timedelta(hours=1),
+        ends_at=now + timedelta(days=7),
+        duration_minutes=60,
+        lifecycle_state="published",
+        shuffle_questions=True,
+        shuffle_options=True,
+        negative_marking=0.25,
+        max_violations=5,
+        require_webcam=True,
+        require_fullscreen=True,
+        show_results_immediately=True,
+        created_by=admin.id,
+    )
+    db.add(exam)
+    await db.flush()
+
+    for position, spec in enumerate(SAMPLE_QUESTIONS, start=1):
+        db.add(
+            Question(
+                exam_id=exam.id,
+                position=position,
+                kind=spec["kind"],
+                prompt=spec["prompt"],
+                options=spec.get("options", []),
+                correct_answer=spec.get("correct_answer"),
+                marks=spec["marks"],
+                negative_marks=spec.get("negative_marks", 0.0),
+                explanation=spec.get("explanation"),
+                numeric_tolerance=spec.get("numeric_tolerance", 0.0),
+                coding=spec.get("coding"),
+            )
         )
-        session.add_all([admin_user, invigilator_user])
-        await session.flush()
 
-        # 2. 100 Candidates
-        candidates = []
-        for i in range(1, 101):
-            code_num = f"{i:03d}"
-            cand_user = User(
-                username=f"candidate_{code_num}",
-                password_hash=hash_password("password123"),
-                role="candidate"
-            )
-            session.add(cand_user)
-            await session.flush()
+    for candidate in created_candidates:
+        db.add(Enrollment(exam_id=exam.id, candidate_id=candidate.id))
 
-            cand_profile = Candidate(
-                user_id=cand_user.id,
-                candidate_code=f"C-{1000 + i}",
-                display_name=f"Candidate {code_num}"
-            )
-            session.add(cand_profile)
-            candidates.append(cand_profile)
+    await db.commit()
+    logger.info("Seeded admin, invigilator, 3 demo students, and 1 sample live exam.")
 
-        # 3. Master Examination
-        now = datetime.now(timezone.utc)
-        exam = Examination(
-            title="CS201: Distributed Systems & Scalable Architecture",
-            description="Comprehensive assessment on distributed consensus, data consistency, caching strategies, and load resilience.",
-            duration_seconds=3600,
-            start_time=now - timedelta(hours=1),
-            end_time=now + timedelta(hours=24),
-            total_marks=float(len(QUESTIONS_DATA)),
-            negative_mark_factor=0.25,
-            status="active"
-        )
-        session.add(exam)
-        await session.flush()
-
-        # 4. 20 Master Questions
-        for idx, q_data in enumerate(QUESTIONS_DATA):
-            q = Question(
-                examination_id=exam.id,
-                question_text=q_data["text"],
-                question_type="mcq",
-                options=q_data["options"],
-                correct_answer=q_data["correct"],
-                marks=1.0,
-                negative_marks=0.25,
-                order_index=idx + 1,
-                explanation=q_data.get("explanation")
-            )
-            session.add(q)
-
-        await session.commit()
-        print("Database seeding completed successfully!")
-        print(f"Created: 1 Admin, 1 Invigilator, 100 Candidates, 1 Exam with {len(QUESTIONS_DATA)} questions.")
 
 if __name__ == "__main__":
     asyncio.run(seed_database())

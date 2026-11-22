@@ -39,3 +39,4 @@ echo =================================================================
 echo ExamPulse is running in background windows.
 echo Close individual command windows to stop services.
 echo =================================================================
+

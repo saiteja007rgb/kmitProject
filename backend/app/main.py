@@ -1,73 +1,104 @@
+"""FastAPI application entry point, lifespan startup/shutdown, security middleware, and health endpoint."""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
-from app.database import engine, Base
-from app.redis_client import redis_manager
-from app.seed import seed_database
-from app.routers.auth import router as auth_router
-from app.routers.exams import router as exams_router
-from app.routers.answers import router as answers_router
-from app.routers.submissions import router as submissions_router
-from app.routers.admin import router as admin_router
-from app.routers.websockets import router as ws_router
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
-logging.basicConfig(level=logging.INFO)
+from app.config import settings
+from app.core.middleware import SecurityMiddleware
+from app.core.redis_store import redis_store
+from app.database import Base, SessionFactory, engine
+from app.routers.admin_exams import router as admin_exams_router
+from app.routers.admin_monitor import router as admin_monitor_router
+from app.routers.admin_people import router as admin_people_router
+from app.routers.auth import router as auth_router
+from app.routers.candidate import router as candidate_router
+from app.routers.websockets import router as websockets_router
+from app.seed import seed_database
+from app.services.scoring import sweep_expired_attempts_once
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("exampulse.main")
 
+
+async def _expiry_sweeper_loop() -> None:
+    while True:
+        try:
+            await asyncio.sleep(30)
+            await sweep_expired_attempts_once()
+        except asyncio.CancelledError:
+            break
+        except Exception:  # noqa: BLE001
+            logger.exception("Error while sweeping expired attempts")
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Initializing ExamPulse [%s]...", settings.INSTANCE_ID)
-    # Ensure database schema is ready
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    # Seed default data if database is empty
+async def lifespan(_app: FastAPI):
+    logger.info("Starting ExamPulse v2 [%s]...", settings.instance_id)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+    except (OperationalError, ProgrammingError) as exc:
+        # Multi-instance race: another replica created the tables at the exact same moment.
+        if "already exists" not in str(exc).lower():
+            raise
     await seed_database()
-    # Connect to Redis
-    await redis_manager.connect()
-    logger.info("ExamPulse [%s] startup sequence complete.", settings.INSTANCE_ID)
+    await redis_store.connect()
+
+    sweeper = asyncio.create_task(_expiry_sweeper_loop())
+    logger.info("ExamPulse v2 [%s] ready (sqlite=%s, fake_redis=%s).", settings.instance_id, settings.is_sqlite, redis_store.is_fake)
     yield
-    logger.info("Shutting down ExamPulse [%s]...", settings.INSTANCE_ID)
-    await redis_manager.close()
+    sweeper.cancel()
+    try:
+        await sweeper
+    except asyncio.CancelledError:
+        pass
+    await redis_store.close()
     await engine.dispose()
+
 
 app = FastAPI(
     title="ExamPulse API",
-    description="High-Load Online Assessment Platform with Real-Time Monitoring and Collusion Detection",
-    version="1.0.0",
-    lifespan=lifespan
+    version="2.0.0",
+    lifespan=lifespan,
+    docs_url=None if settings.environment == "production" else "/docs",
+    redoc_url=None if settings.environment == "production" else "/redoc",
 )
 
+app.add_middleware(SecurityMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth_router)
-app.include_router(exams_router)
-app.include_router(answers_router)
-app.include_router(submissions_router)
-app.include_router(admin_router)
-app.include_router(ws_router)
+app.include_router(admin_people_router)
+app.include_router(admin_exams_router)
+app.include_router(admin_monitor_router)
+app.include_router(candidate_router)
+app.include_router(websockets_router)
+
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "instance_id": settings.INSTANCE_ID,
-        "database": "connected",
-        "redis_fallback": redis_manager.is_fake
-    }
+    db_ok = True
+    try:
+        async with SessionFactory() as db:
+            await db.execute(text("SELECT 1"))
+    except Exception:  # noqa: BLE001
+        db_ok = False
 
-@app.get("/")
-async def root():
     return {
-        "app": "ExamPulse Assessment Platform",
-        "instance": settings.INSTANCE_ID,
-        "version": "1.0.0",
-        "docs_url": "/docs"
+        "status": "healthy" if db_ok else "degraded",
+        "version": "2.0.0",
+        "instance_id": settings.instance_id,
+        "database": "sqlite" if settings.is_sqlite else "postgresql",
+        "redis": "in-memory-fallback" if redis_store.is_fake else "connected",
     }

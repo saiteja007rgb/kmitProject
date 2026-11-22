@@ -1,18 +1,29 @@
 {
   "name": "exampulse-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
+    "sync-mediapipe": "mkdir -p public/mediapipe/wasm && cp -r node_modules/@mediapipe/tasks-vision/wasm/* public/mediapipe/wasm/",
+    "postinstall": "npm run sync-mediapipe",
+    "predev": "npm run sync-mediapipe",
+    "prebuild": "npm run sync-mediapipe",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codemirror/lang-cpp": "^6.0.2",
+    "@codemirror/lang-java": "^6.0.1",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/lang-python": "^6.1.6",
+    "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
+    "@uiw/react-codemirror": "^4.23.6",
     "axios": "^1.7.7",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
@@ -24,4 +35,3 @@
     "vite": "^5.4.10"
   }
 }
-

@@ -12,13 +12,15 @@ env/
 *.db
 *.db-shm
 *.db-wal
-exampulse.db*
+exampulse*.db*
+backend/storage/
 
 # Node / Frontend
 frontend/node_modules/
 node_modules/
 frontend/dist/
 dist/
+frontend/public/mediapipe/wasm/
 .env.local
 .env.*.local
 npm-debug.log*
@@ -27,6 +29,7 @@ yarn-error.log*
 
 # Environment & Secrets
 .env
+backend/.env
 
 # Logs
 *.log
@@ -37,4 +40,3 @@ load_testing/reports/*.csv
 Thumbs.db
 .vscode/
 .idea/
-
