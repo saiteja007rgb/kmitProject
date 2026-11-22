@@ -37,23 +37,6 @@ async def _expiry_sweeper_loop() -> None:
             logger.exception("Error while sweeping expired attempts")
 
 
-async def _ensure_incremental_columns() -> None:
-    """Safely adds v2.1 columns onto existing local SQLite/PostgreSQL databases without dropping data."""
-    column_specs = [
-        ("users", "email_verified", "BOOLEAN NOT NULL DEFAULT TRUE"),
-        ("users", "totp_secret", "VARCHAR(64)"),
-        ("users", "totp_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
-        ("users", "backup_codes", "JSON"),
-        ("exams", "access_code", "VARCHAR(32)"),
-    ]
-    for table_name, col_name, col_ddl in column_specs:
-        try:
-            async with engine.begin() as connection:
-                await connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_ddl}"))
-        except (OperationalError, ProgrammingError):
-            pass
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logger.info("Starting ExamPulse v2 [%s]...", settings.instance_id)
@@ -64,7 +47,6 @@ async def lifespan(_app: FastAPI):
         # Multi-instance race: another replica created the tables at the exact same moment.
         if "already exists" not in str(exc).lower():
             raise
-    await _ensure_incremental_columns()
     await seed_database()
     await redis_store.connect()
 

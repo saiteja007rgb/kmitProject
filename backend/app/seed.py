@@ -10,7 +10,7 @@ import asyncio
 import logging
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
 from app.config import settings
@@ -123,6 +123,23 @@ SAMPLE_QUESTIONS = [
 ]
 
 
+async def ensure_incremental_columns() -> None:
+    """Safely adds v2.1 columns onto existing SQLite/PostgreSQL databases without dropping data."""
+    column_specs = [
+        ("users", "email_verified", "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ("users", "totp_secret", "VARCHAR(64)"),
+        ("users", "totp_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("users", "backup_codes", "JSON"),
+        ("exams", "access_code", "VARCHAR(32)"),
+    ]
+    for table_name, col_name, col_ddl in column_specs:
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_ddl}"))
+        except (OperationalError, ProgrammingError):
+            pass
+
+
 async def seed_database() -> None:
     try:
         async with engine.begin() as connection:
@@ -130,6 +147,8 @@ async def seed_database() -> None:
     except (OperationalError, ProgrammingError) as exc:
         if "already exists" not in str(exc).lower():
             raise
+
+    await ensure_incremental_columns()
 
     async with SessionFactory() as db:
         existing_admin = (await db.execute(select(User).where(User.username == "admin"))).scalar_one_or_none()
