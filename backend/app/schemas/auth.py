@@ -20,6 +20,8 @@ class UserOut(BaseModel):
     email: str | None
     role: UserRole
     must_change_password: bool
+    totp_enabled: bool = False
+    email_verified: bool = True
     candidate: CandidateProfileOut | None = None
 
 
@@ -32,8 +34,10 @@ class TokenOut(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
     password: str = Field(..., min_length=1, max_length=128)
+    totp_code: str | None = Field(default=None, max_length=16)
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)
+

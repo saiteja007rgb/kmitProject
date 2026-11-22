@@ -79,3 +79,4 @@ echo "================================================================="
 echo " Real Redis/Valkey + PostgreSQL configured in backend/.env!"
 echo " Start the platform with: ./run.sh"
 echo "================================================================="
+

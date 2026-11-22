@@ -78,3 +78,4 @@ export function useBrowserLockdown({ enabled, requireFullscreen, onEvent }) {
     };
   }, [enabled, requireFullscreen]);
 }
+

@@ -152,3 +152,4 @@ async def test_exam_lifecycle_pause_resume_end_and_question_import(client):
     detail = await client.get(f"/api/admin/attempts/{attempt_id}", headers=headers)
     assert detail.json()["status"] == "submitted"
     assert detail.json()["submit_reason"] == "exam_ended"
+

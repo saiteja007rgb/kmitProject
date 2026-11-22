@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, Play, XCircle } from 'lucide-react';
 import { candidateApi } from '../../api/endpoints';
 import { extractApiError } from '../../lib/format';
-import { Button, Card, Checkbox, Spinner } from '../../components/ui';
+import { Button, Card, Checkbox, Input, Spinner } from '../../components/ui';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useWebcamProctor } from '../proctoring/useWebcamProctor';
 import { CameraPreview } from '../proctoring/CameraPreview';
@@ -32,6 +32,7 @@ export default function PreExamCheckPage() {
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [agreed, setAgreed] = useState(false);
+  const [accessCode, setAccessCode] = useState('');
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
@@ -66,7 +67,8 @@ export default function PreExamCheckPage() {
   const isOnline = navigator.onLine;
   const fullscreenSupported = Boolean(document.documentElement.requestFullscreen);
   const cameraPassed = !exam.require_webcam || cameraCheck.cameraState === 'active';
-  const canStart = agreed && isOnline && cameraPassed && exam.status === 'live';
+  const pinPassed = !exam.requires_access_code || accessCode.trim().length > 0;
+  const canStart = agreed && isOnline && cameraPassed && pinPassed && exam.status === 'live';
 
   const handleStartExam = async () => {
     setStarting(true);
@@ -74,7 +76,7 @@ export default function PreExamCheckPage() {
       if (exam.require_fullscreen && fullscreenSupported && !document.fullscreenElement) {
         await document.documentElement.requestFullscreen().catch(() => {});
       }
-      const attemptState = await candidateApi.startOrResumeExam(exam.id);
+      const attemptState = await candidateApi.startOrResumeExam(exam.id, accessCode.trim() || null);
       navigate(`/candidate/attempts/${attemptState.attempt_id}`, { replace: true });
     } catch (error) {
       notify(extractApiError(error, 'Could not start exam.'), 'danger');
@@ -159,6 +161,18 @@ export default function PreExamCheckPage() {
           </ul>
         </div>
 
+        {exam.requires_access_code && (
+          <div className="max-w-xs">
+            <Input
+              label="Proctor entry PIN"
+              value={accessCode}
+              onChange={(event) => setAccessCode(event.target.value)}
+              placeholder="Enter PIN announced in the room"
+              required
+            />
+          </div>
+        )}
+
         <Checkbox
           label="I understand the examination rules and am ready to begin."
           checked={agreed}
@@ -175,3 +189,4 @@ export default function PreExamCheckPage() {
     </div>
   );
 }
+

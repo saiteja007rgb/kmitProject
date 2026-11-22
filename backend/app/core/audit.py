@@ -35,3 +35,4 @@ def record_audit(
             ip_address=ip_address,
         )
     )
+

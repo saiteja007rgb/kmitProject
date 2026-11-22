@@ -24,6 +24,7 @@ import { useToast } from '../../components/ui/ToastProvider';
 import { useBrowserLockdown } from '../proctoring/useBrowserLockdown';
 import { useWebcamProctor } from '../proctoring/useWebcamProctor';
 import { CameraPreview } from '../proctoring/CameraPreview';
+import { FeedbackFormCard } from './FeedbackFormCard';
 
 const CodeQuestionEditor = lazy(() => import('./CodeQuestionEditor'));
 
@@ -411,60 +412,64 @@ export default function ExamRoomPage() {
 
   if (receipt) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 px-4">
-        <Card className="w-full max-w-lg p-6 space-y-5">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Examination submitted</h1>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Your responses have been recorded and locked.
-              </p>
+      <div className="min-h-screen flex items-center justify-center bg-[#FAFAFB] dark:bg-[#09090B] px-4 py-8">
+        <div className="w-full max-w-xl space-y-5">
+          <Card className="p-6 space-y-5">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Examination submitted</h1>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  Your responses have been recorded and locked.
+                </p>
+              </div>
             </div>
-          </div>
 
-          <dl className="grid grid-cols-2 gap-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 text-sm">
-            <div>
-              <dt className="text-xs text-zinc-500">Receipt ID</dt>
-              <dd className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">{receipt.receipt_id}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">Submitted at</dt>
-              <dd className="font-medium text-zinc-900 dark:text-zinc-100">{formatDateTime(receipt.submitted_at)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">Answered</dt>
-              <dd className="font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
-                {receipt.answered_count} / {receipt.total_questions}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">Reason</dt>
-              <dd className="font-medium capitalize text-zinc-900 dark:text-zinc-100">
-                {receipt.submit_reason.replace('_', ' ')}
-              </dd>
-            </div>
-            {receipt.results_visible && (
-              <div className="col-span-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-                <dt className="text-xs text-zinc-500">Score</dt>
-                <dd className="text-xl font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
-                  {receipt.score} / {receipt.max_score}
+            <dl className="grid grid-cols-2 gap-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 text-sm">
+              <div>
+                <dt className="text-xs text-zinc-500">Receipt ID</dt>
+                <dd className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">{receipt.receipt_id}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-zinc-500">Submitted at</dt>
+                <dd className="font-medium text-zinc-900 dark:text-zinc-100">{formatDateTime(receipt.submitted_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-zinc-500">Answered</dt>
+                <dd className="font-medium tabular-nums text-zinc-900 dark:text-zinc-100">
+                  {receipt.answered_count} / {receipt.total_questions}
                 </dd>
               </div>
-            )}
-          </dl>
+              <div>
+                <dt className="text-xs text-zinc-500">Reason</dt>
+                <dd className="font-medium capitalize text-zinc-900 dark:text-zinc-100">
+                  {receipt.submit_reason.replace('_', ' ')}
+                </dd>
+              </div>
+              {receipt.results_visible && (
+                <div className="col-span-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                  <dt className="text-xs text-zinc-500">Score</dt>
+                  <dd className="text-xl font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
+                    {receipt.score} / {receipt.max_score}
+                  </dd>
+                </div>
+              )}
+            </dl>
 
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => navigate('/candidate', { replace: true })}>
-              Back to dashboard
-            </Button>
-            {receipt.results_visible && (
-              <Button onClick={() => navigate(`/candidate/attempts/${attemptId}/result`, { replace: true })}>
-                Review solutions
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="secondary" onClick={() => navigate('/candidate', { replace: true })}>
+                Back to dashboard
               </Button>
-            )}
-          </div>
-        </Card>
+              {receipt.results_visible && (
+                <Button onClick={() => navigate(`/candidate/attempts/${attemptId}/result`, { replace: true })}>
+                  Review solutions
+                </Button>
+              )}
+            </div>
+          </Card>
+
+          <FeedbackFormCard attemptId={attemptId} questions={questions} />
+        </div>
       </div>
     );
   }
@@ -884,3 +889,4 @@ export default function ExamRoomPage() {
     </div>
   );
 }
+

@@ -202,3 +202,4 @@ def parse_question_file(filename: str, content_bytes: bytes) -> list[QuestionInp
         return [item for row in reader if (item := _parse_tabular_row(row)) is not None]
 
     return _parse_text_paper(text)
+

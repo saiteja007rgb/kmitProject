@@ -91,3 +91,4 @@ async def authenticate_websocket_token(token: str | None, db: AsyncSession) -> U
     except HTTPException:
         return None
     return context.user
+

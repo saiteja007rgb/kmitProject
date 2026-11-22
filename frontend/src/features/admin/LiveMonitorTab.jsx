@@ -317,3 +317,4 @@ export function LiveMonitorTab({ examId, onExamSummaryUpdated }) {
     </div>
   );
 }
+

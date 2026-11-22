@@ -92,3 +92,4 @@ export const EXAM_STATUS_META = {
   paused: { label: 'Paused', tone: 'warning' },
   ended: { label: 'Ended', tone: 'neutral' },
 };
+

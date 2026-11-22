@@ -34,6 +34,7 @@ from app.schemas.attempts import (
     CandidateExamCard,
     CodeRunRequest,
     CodeRunResult,
+    ExamStartRequest,
     HeartbeatResponse,
     ProctoringEventRequest,
     ProctoringEventResponse,
@@ -234,6 +235,7 @@ async def list_enrolled_exams(
                 total_marks=round(total_marks, 2),
                 require_webcam=exam.require_webcam,
                 require_fullscreen=exam.require_fullscreen,
+                requires_access_code=bool(exam.access_code),
                 attempt=attempt_summary,
                 results_available=results_available,
             )
@@ -245,6 +247,7 @@ async def list_enrolled_exams(
 async def start_or_resume_exam(
     exam_id: str,
     request: Request,
+    payload: ExamStartRequest | None = None,
     candidate: Candidate = Depends(get_current_candidate),
     db: AsyncSession = Depends(get_db),
 ):
@@ -276,6 +279,11 @@ async def start_or_resume_exam(
     exam_status = effective_exam_status(exam)
     if exam_status != "live":
         raise HTTPException(status.HTTP_409_CONFLICT, f"This examination is currently {exam_status} and cannot be started.")
+
+    if exam.access_code:
+        submitted_code = (payload.access_code or "").strip() if payload else ""
+        if submitted_code != exam.access_code:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid examination access PIN.")
 
     questions = (
         await db.execute(select(Question).where(Question.exam_id == exam.id).order_by(Question.position.asc()))
@@ -663,3 +671,4 @@ async def get_candidate_result(
         grading_pending=attempt.grading_pending,
         questions=items,
     )
+

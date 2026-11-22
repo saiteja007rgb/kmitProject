@@ -99,3 +99,4 @@ async def test_monitoring_grading_analytics_csv_and_collusion(client):
     flags = (await client.get(f"/api/admin/exams/{c_exam_id}/collusion-flags", headers=headers)).json()
     assert flags[0]["risk_level"] == "critical"
     assert flags[0]["evidence"]["matching_incorrect_count"] == 5
+

@@ -1,9 +1,17 @@
-/** Typed domain wrappers matching docs/API_CONTRACT.md. */
+/** Typed domain API wrappers matching backend routers. */
 import { httpClient, refreshAccessTokenSingleFlight } from './httpClient';
 
 export const authApi = {
-  login: (username, password) =>
-    httpClient.post('/auth/login', { username, password }).then((response) => response.data),
+  login: (username, password, totpCode = null) =>
+    httpClient
+      .post('/auth/login', { username, password, totp_code: totpCode || null })
+      .then((response) => response.data),
+  register: (payload) => httpClient.post('/auth/register', payload).then((response) => response.data),
+  verifyEmail: (username, code) => httpClient.post('/auth/verify-email', { username, code }),
+  forgotPassword: (username) =>
+    httpClient.post('/auth/forgot-password', { username }).then((response) => response.data),
+  resetPassword: (username, code, newPassword) =>
+    httpClient.post('/auth/reset-password', { username, code, new_password: newPassword }),
   refresh: () => refreshAccessTokenSingleFlight(),
   logout: () => httpClient.post('/auth/logout'),
   getMe: () => httpClient.get('/auth/me').then((response) => response.data),
@@ -12,10 +20,17 @@ export const authApi = {
       current_password: currentPassword,
       new_password: newPassword,
     }),
+  getSecurity: () => httpClient.get('/auth/security').then((response) => response.data),
+  setup2fa: () => httpClient.post('/auth/2fa/setup').then((response) => response.data),
+  enable2fa: (code) => httpClient.post('/auth/2fa/enable', { code }).then((response) => response.data),
+  disable2fa: (code) => httpClient.post('/auth/2fa/disable', { code }),
+  revokeSession: (sessionId) => httpClient.delete(`/auth/sessions/${sessionId}`),
+  revokeOtherSessions: () => httpClient.post('/auth/sessions/revoke-others'),
 };
 
 export const adminPeopleApi = {
   getDashboard: () => httpClient.get('/admin/dashboard').then((response) => response.data),
+  getSystemStatus: () => httpClient.get('/admin/system-status').then((response) => response.data),
   listCandidates: (params) =>
     httpClient.get('/admin/candidates', { params }).then((response) => response.data),
   createCandidate: (payload) =>
@@ -79,6 +94,12 @@ export const adminExamsApi = {
     httpClient.patch(`/admin/exams/${examId}/enrollments/${candidateId}`, { extra_minutes: extraMinutes }),
   removeEnrollment: (examId, candidateId) =>
     httpClient.delete(`/admin/exams/${examId}/enrollments/${candidateId}`),
+
+  listQuestionBank: (params) =>
+    httpClient.get('/admin/question-bank', { params }).then((response) => response.data),
+  createQuestionBankItem: (payload) =>
+    httpClient.post('/admin/question-bank', payload).then((response) => response.data),
+  deleteQuestionBankItem: (itemId) => httpClient.delete(`/admin/question-bank/${itemId}`),
 };
 
 export const adminMonitorApi = {
@@ -110,6 +131,43 @@ export const adminMonitorApi = {
   downloadResultsCsv: (examId) =>
     httpClient.get(`/admin/exams/${examId}/results.csv`, { responseType: 'blob' }).then((response) => response.data),
 
+  // Marks Export Center
+  getMarksJson: (examId, batchId = '') =>
+    httpClient
+      .get(`/admin/exams/${examId}/export/marks.json`, { params: batchId ? { batch_id: batchId } : {} })
+      .then((response) => response.data),
+  downloadMarksXlsx: (examId, batchId = '') =>
+    httpClient
+      .get(`/admin/exams/${examId}/export/marks.xlsx`, {
+        params: batchId ? { batch_id: batchId } : {},
+        responseType: 'blob',
+      })
+      .then((response) => response.data),
+  downloadMarksCsv: (examId, batchId = '') =>
+    httpClient
+      .get(`/admin/exams/${examId}/export/marks.csv`, {
+        params: batchId ? { batch_id: batchId } : {},
+        responseType: 'blob',
+      })
+      .then((response) => response.data),
+  downloadConsolidatedXlsx: (batchId = '') =>
+    httpClient
+      .get('/admin/reports/consolidated.xlsx', {
+        params: batchId ? { batch_id: batchId } : {},
+        responseType: 'blob',
+      })
+      .then((response) => response.data),
+
+  // Feedback & Regrades
+  getExamFeedback: (examId) =>
+    httpClient.get(`/admin/exams/${examId}/feedback`).then((response) => response.data),
+  getAllFeedback: () =>
+    httpClient.get('/admin/feedback/overview').then((response) => response.data),
+  listExamRegrades: (examId) =>
+    httpClient.get(`/admin/exams/${examId}/regrades`).then((response) => response.data),
+  resolveRegrade: (regradeId, payload) =>
+    httpClient.post(`/admin/regrades/${regradeId}/resolve`, payload).then((response) => response.data),
+
   listGradingQueue: (examId, pendingOnly = true) =>
     httpClient
       .get(`/admin/exams/${examId}/grading-queue`, { params: { pending_only: pendingOnly } })
@@ -122,8 +180,11 @@ export const adminMonitorApi = {
 
 export const candidateApi = {
   listEnrolledExams: () => httpClient.get('/candidate/exams').then((response) => response.data),
-  startOrResumeExam: (examId) =>
-    httpClient.post(`/candidate/exams/${examId}/start`, {}).then((response) => response.data),
+  getTranscript: () => httpClient.get('/candidate/transcript').then((response) => response.data),
+  startOrResumeExam: (examId, accessCode = null) =>
+    httpClient
+      .post(`/candidate/exams/${examId}/start`, accessCode ? { access_code: accessCode } : {})
+      .then((response) => response.data),
   getAttempt: (attemptId) =>
     httpClient.get(`/candidate/attempts/${attemptId}`).then((response) => response.data),
   heartbeat: (attemptId) =>
@@ -162,4 +223,14 @@ export const candidateApi = {
       .then((response) => response.data),
   getResult: (attemptId) =>
     httpClient.get(`/candidate/attempts/${attemptId}/result`).then((response) => response.data),
+  getAttemptFeedback: (attemptId) =>
+    httpClient.get(`/candidate/attempts/${attemptId}/feedback`).then((response) => response.data),
+  submitAttemptFeedback: (attemptId, payload) =>
+    httpClient.post(`/candidate/attempts/${attemptId}/feedback`, payload).then((response) => response.data),
+  listAttemptRegrades: (attemptId) =>
+    httpClient.get(`/candidate/attempts/${attemptId}/regrades`).then((response) => response.data),
+  createRegradeRequest: (attemptId, questionId, reason) =>
+    httpClient
+      .post(`/candidate/attempts/${attemptId}/regrades`, { question_id: questionId, reason })
+      .then((response) => response.data),
 };

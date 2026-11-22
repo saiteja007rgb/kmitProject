@@ -34,6 +34,15 @@ async def setup_test_environment():
     shutil.rmtree(TEST_DIR, ignore_errors=True)
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def reset_rate_limits():
+    if redis_store.client is not None:
+        keys = await redis_store.client.keys("ratelimit:*")
+        if keys:
+            await redis_store.client.delete(*keys)
+    yield
+
+
 @pytest_asyncio.fixture
 async def client():
     transport = ASGITransport(app=app)

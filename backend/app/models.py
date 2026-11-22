@@ -35,7 +35,11 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str | None] = mapped_column(String(254))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    totp_secret: Mapped[str | None] = mapped_column(String(64))
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    backup_codes: Mapped[list | None] = mapped_column(JSON(none_as_null=True))
     last_login_at: Mapped[datetime | None] = timestamp(nullable=True)
     created_at: Mapped[datetime] = timestamp(default=utc_now)
 
@@ -101,6 +105,7 @@ class Exam(Base):
     require_webcam: Mapped[bool] = mapped_column(Boolean, default=True)
     require_fullscreen: Mapped[bool] = mapped_column(Boolean, default=True)
     show_results_immediately: Mapped[bool] = mapped_column(Boolean, default=False)
+    access_code: Mapped[str | None] = mapped_column(String(32))
 
     created_by: Mapped[str | None] = foreign_key("users.id", on_delete="SET NULL", nullable=True, index=False)
     created_at: Mapped[datetime] = timestamp(default=utc_now)
@@ -253,3 +258,69 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = timestamp(default=utc_now, index=True)
 
     actor: Mapped[User | None] = relationship()
+
+
+class ExamFeedback(Base):
+    """Structured post-exam feedback submitted by a candidate after finishing an attempt."""
+
+    __tablename__ = "exam_feedback"
+
+    id: Mapped[str] = id_column()
+    exam_id: Mapped[str] = foreign_key("exams.id")
+    attempt_id: Mapped[str] = mapped_column(String(36), ForeignKey("attempts.id", ondelete="CASCADE"), unique=True)
+    candidate_id: Mapped[str] = foreign_key("candidates.id")
+    overall_rating: Mapped[int] = mapped_column(Integer)  # 1..5
+    difficulty: Mapped[str] = mapped_column(String(20))  # too_easy | just_right | challenging | too_hard
+    clarity_rating: Mapped[int] = mapped_column(Integer)  # 1..5
+    platform_rating: Mapped[int] = mapped_column(Integer)  # 1..5
+    comments: Mapped[str | None] = mapped_column(Text)
+    flagged_question_id: Mapped[str | None] = foreign_key("questions.id", on_delete="SET NULL", nullable=True, index=False)
+    created_at: Mapped[datetime] = timestamp(default=utc_now)
+
+    candidate: Mapped[Candidate] = relationship()
+
+
+class QuestionBankItem(Base):
+    """Reusable institutional question library searchable by subject, difficulty, and tags."""
+
+    __tablename__ = "question_bank"
+
+    id: Mapped[str] = id_column()
+    title: Mapped[str] = mapped_column(String(200))
+    subject: Mapped[str] = mapped_column(String(80), index=True)
+    difficulty: Mapped[str] = mapped_column(String(20), default="medium", index=True)  # easy | medium | hard
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    prompt: Mapped[str] = mapped_column(Text)
+    options: Mapped[list] = mapped_column(JSON, default=list)
+    correct_answer: Mapped[object | None] = mapped_column(JSON(none_as_null=True))
+    marks: Mapped[float] = mapped_column(Float, default=1.0)
+    negative_marks: Mapped[float | None] = mapped_column(Float)
+    explanation: Mapped[str | None] = mapped_column(Text)
+    numeric_tolerance: Mapped[float] = mapped_column(Float, default=0.0)
+    coding: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+    created_by: Mapped[str | None] = foreign_key("users.id", on_delete="SET NULL", nullable=True, index=False)
+    created_at: Mapped[datetime] = timestamp(default=utc_now)
+
+
+class RegradeRequest(Base):
+    """Candidate appeal/regrade ticket for a specific graded question after results are published."""
+
+    __tablename__ = "regrade_requests"
+
+    id: Mapped[str] = id_column()
+    exam_id: Mapped[str] = foreign_key("exams.id")
+    attempt_id: Mapped[str] = foreign_key("attempts.id")
+    answer_id: Mapped[str] = foreign_key("answers.id")
+    candidate_id: Mapped[str] = foreign_key("candidates.id")
+    question_id: Mapped[str] = foreign_key("questions.id")
+    reason: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)  # open | approved | rejected
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+    resolved_by: Mapped[str | None] = foreign_key("users.id", on_delete="SET NULL", nullable=True, index=False)
+    created_at: Mapped[datetime] = timestamp(default=utc_now)
+    resolved_at: Mapped[datetime | None] = timestamp(nullable=True)
+
+    candidate: Mapped[Candidate] = relationship()
+    question: Mapped[Question] = relationship()
+

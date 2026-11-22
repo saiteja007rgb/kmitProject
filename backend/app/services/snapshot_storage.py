@@ -39,3 +39,4 @@ def delete_snapshots(snapshot_ids: list[str]) -> None:
         if UUID_PATTERN.match(snapshot_id):
             path = settings.storage_dir / "snapshots" / f"{snapshot_id}.jpg"
             path.unlink(missing_ok=True)
+

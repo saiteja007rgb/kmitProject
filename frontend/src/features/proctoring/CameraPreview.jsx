@@ -42,3 +42,4 @@ export function CameraPreview({ videoRef, cameraState, detectorReady, gazeStatus
     </div>
   );
 }
+

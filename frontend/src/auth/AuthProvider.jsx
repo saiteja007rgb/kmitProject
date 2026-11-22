@@ -35,8 +35,8 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const signIn = useCallback(async (username, password) => {
-    const data = await authApi.login(username, password);
+  const signIn = useCallback(async (username, password, totpCode = null) => {
+    const data = await authApi.login(username, password, totpCode);
     setAccessToken(data.access_token);
     setSessionNotice(null);
     setUser(data.user);
@@ -102,3 +102,4 @@ export function RequireRole({ allowedRoles, children }) {
 
   return children;
 }
+

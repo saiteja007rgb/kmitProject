@@ -216,3 +216,4 @@ async def sweep_expired_attempts_once() -> int:
             await db.commit()
             logger.info("Auto-submitted %d expired attempt(s).", finalized)
         return finalized
+

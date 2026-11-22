@@ -144,3 +144,4 @@ async def run_collusion_scan(
     db.add_all(flags)
     await db.commit()
     return flags
+

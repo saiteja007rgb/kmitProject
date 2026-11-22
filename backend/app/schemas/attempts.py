@@ -43,8 +43,13 @@ class CandidateExamCard(BaseModel):
     total_marks: float
     require_webcam: bool
     require_fullscreen: bool
+    requires_access_code: bool = False
     attempt: CandidateAttemptSummary | None
     results_available: bool
+
+
+class ExamStartRequest(BaseModel):
+    access_code: str | None = Field(default=None, max_length=32)
 
 
 class AttemptExamMeta(BaseModel):
@@ -176,3 +181,4 @@ class ResultView(BaseModel):
     submitted_at: datetime | None
     grading_pending: bool
     questions: list[ResultQuestionView]
+

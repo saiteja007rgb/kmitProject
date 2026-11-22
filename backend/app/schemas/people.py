@@ -124,3 +124,4 @@ class AuditLogOut(BaseModel):
 class AuditLogPageResponse(BaseModel):
     items: list[AuditLogOut]
     total: int
+

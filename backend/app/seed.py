@@ -17,7 +17,7 @@ from app.config import settings
 from app.core.clock import utc_now
 from app.core.security import hash_password
 from app.database import Base, SessionFactory, engine
-from app.models import Batch, Candidate, Enrollment, Exam, Question, User
+from app.models import Batch, Candidate, Enrollment, Exam, Question, QuestionBankItem, User
 
 logger = logging.getLogger("exampulse.seed")
 
@@ -241,8 +241,35 @@ async def _insert_initial_data(db) -> None:
     for candidate in created_candidates:
         db.add(Enrollment(exam_id=exam.id, candidate_id=candidate.id))
 
+    # Seed reusable Question Bank items so admins can import straight into new exams
+    bank_seeds = [
+        ("CAP Theorem Trade-offs", "Distributed Systems", "medium", ["cap", "consensus"], SAMPLE_QUESTIONS[0]),
+        ("API Replay Protection", "Web Security", "medium", ["security", "idempotency"], SAMPLE_QUESTIONS[1]),
+        ("Bcrypt & Async Event Loops", "Backend Engineering", "hard", ["auth", "async"], SAMPLE_QUESTIONS[5]),
+        ("Sum of Two 64-bit Integers", "Algorithms", "easy", ["io", "basics"], SAMPLE_QUESTIONS[6]),
+    ]
+    for title, subject, difficulty, tags, spec in bank_seeds:
+        db.add(
+            QuestionBankItem(
+                title=title,
+                subject=subject,
+                difficulty=difficulty,
+                tags=tags,
+                kind=spec["kind"],
+                prompt=spec["prompt"],
+                options=spec.get("options", []),
+                correct_answer=spec.get("correct_answer"),
+                marks=spec["marks"],
+                negative_marks=spec.get("negative_marks", 0.0),
+                explanation=spec.get("explanation"),
+                numeric_tolerance=spec.get("numeric_tolerance", 0.0),
+                coding=spec.get("coding"),
+                created_by=admin.id,
+            )
+        )
+
     await db.commit()
-    logger.info("Seeded admin, invigilator, 3 demo students, and 1 sample live exam.")
+    logger.info("Seeded admin, invigilator, 3 demo students, 1 sample live exam, and 4 question bank items.")
 
 
 if __name__ == "__main__":

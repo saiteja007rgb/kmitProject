@@ -90,6 +90,7 @@ async def _exam_to_detail(exam: Exam, db: AsyncSession) -> ExamDetail:
     return ExamDetail(
         **summary.model_dump(),
         instructions=exam.instructions,
+        access_code=exam.access_code,
         settings=exam_settings_from_model(exam),
         questions=[_question_to_admin(question) for question in questions],
     )
@@ -123,6 +124,7 @@ async def create_exam(
         title=payload.title.strip(),
         description=payload.description,
         instructions=payload.instructions,
+        access_code=payload.access_code.strip() if payload.access_code else None,
         starts_at=as_utc(payload.starts_at),
         ends_at=as_utc(payload.ends_at),
         duration_minutes=payload.duration_minutes,
@@ -208,6 +210,7 @@ async def update_exam(
     exam.title = payload.title.strip()
     exam.description = payload.description
     exam.instructions = payload.instructions
+    exam.access_code = payload.access_code.strip() if payload.access_code else None
     exam.starts_at = as_utc(payload.starts_at)
     exam.ends_at = as_utc(payload.ends_at)
     exam.duration_minutes = payload.duration_minutes
@@ -601,3 +604,4 @@ async def remove_enrollment(
         ip_address=client_ip_from_request(request),
     )
     await db.commit()
+

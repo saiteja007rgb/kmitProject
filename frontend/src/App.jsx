@@ -7,8 +7,10 @@ import { Spinner } from './components/ui';
 import { LoginPage } from './features/auth/LoginPage';
 import { ChangePasswordPage } from './features/auth/ChangePasswordPage';
 
-// Lazy-loaded feature bundles keep login & initial load lightweight (no CodeMirror or MediaPipe upfront).
+const AccountSecurityPage = lazy(() => import('./features/auth/AccountSecurityPage'));
+
 const CandidateDashboardPage = lazy(() => import('./features/candidate/CandidateDashboardPage'));
+const CandidateTranscriptPage = lazy(() => import('./features/candidate/CandidateTranscriptPage'));
 const PreExamCheckPage = lazy(() => import('./features/candidate/PreExamCheckPage'));
 const ExamRoomPage = lazy(() => import('./features/candidate/ExamRoomPage'));
 const ResultReviewPage = lazy(() => import('./features/candidate/ResultReviewPage'));
@@ -20,6 +22,9 @@ const StaffPage = lazy(() => import('./features/admin/StaffPage'));
 const ExamsListPage = lazy(() => import('./features/admin/ExamsListPage'));
 const ExamEditorPage = lazy(() => import('./features/admin/ExamEditorPage'));
 const ExamWorkspacePage = lazy(() => import('./features/admin/ExamWorkspacePage'));
+const ReportsExportPage = lazy(() => import('./features/admin/ReportsExportPage'));
+const QuestionBankPage = lazy(() => import('./features/admin/QuestionBankPage'));
+const FeedbackOverviewPage = lazy(() => import('./features/admin/FeedbackTab'));
 const AuditLogPage = lazy(() => import('./features/admin/AuditLogPage'));
 
 function PageFallback() {
@@ -51,6 +56,16 @@ export function App() {
             </RequireRole>
           }
         />
+        <Route
+          path="/account/security"
+          element={
+            <RequireRole>
+              <div className="min-h-screen bg-[#FAFAFB] dark:bg-[#09090B] px-4 py-8">
+                <AccountSecurityPage />
+              </div>
+            </RequireRole>
+          }
+        />
         <Route path="/" element={<RoleHomeRedirect />} />
 
         {/* Candidate portal */}
@@ -62,6 +77,7 @@ export function App() {
           }
         >
           <Route path="/candidate" element={<CandidateDashboardPage />} />
+          <Route path="/candidate/transcript" element={<CandidateTranscriptPage />} />
           <Route path="/candidate/exams/:examId/check" element={<PreExamCheckPage />} />
           <Route path="/candidate/attempts/:attemptId/result" element={<ResultReviewPage />} />
         </Route>
@@ -104,6 +120,9 @@ export function App() {
             }
           />
           <Route path="exams/:examId" element={<ExamWorkspacePage />} />
+          <Route path="question-bank" element={<QuestionBankPage />} />
+          <Route path="reports" element={<ReportsExportPage />} />
+          <Route path="feedback" element={<FeedbackOverviewPage />} />
           <Route path="candidates" element={<CandidatesPage />} />
           <Route path="batches" element={<BatchesPage />} />
           <Route

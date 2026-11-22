@@ -289,3 +289,4 @@ export function AttemptDetailDrawer({ attemptId, onClose, onUpdated }) {
     </>
   );
 }
+

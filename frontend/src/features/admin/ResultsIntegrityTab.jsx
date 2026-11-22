@@ -182,3 +182,4 @@ export function ResultsIntegrityTab({ exam, onExamUpdated }) {
     </div>
   );
 }
+

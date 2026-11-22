@@ -139,3 +139,4 @@ export default function CandidateDashboardPage() {
     </div>
   );
 }
+

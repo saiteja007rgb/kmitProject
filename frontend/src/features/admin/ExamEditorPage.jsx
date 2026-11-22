@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, ArrowLeft, ArrowUp, Copy, Plus, Trash2, Upload } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, BookMarked, Copy, Plus, Trash2, Upload } from 'lucide-react';
 import { adminExamsApi } from '../../api/endpoints';
 import {
   extractApiError,
@@ -15,6 +15,7 @@ import {
   Checkbox,
   IconButton,
   Input,
+  Modal,
   Select,
   Spinner,
   Switch,
@@ -154,6 +155,9 @@ export default function ExamEditorPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [accessCode, setAccessCode] = useState('');
+  const [bankOpen, setBankOpen] = useState(false);
+  const [bankItems, setBankItems] = useState([]);
   const [startsAt, setStartsAt] = useState(defaultStart);
   const [endsAt, setEndsAt] = useState(defaultEnd);
   const [durationMinutes, setDurationMinutes] = useState(60);
@@ -176,6 +180,7 @@ export default function ExamEditorPage() {
         setTitle(detail.title);
         setDescription(detail.description || '');
         setInstructions(detail.instructions || '');
+        setAccessCode(detail.access_code || '');
         setStartsAt(toDatetimeLocalValue(detail.starts_at));
         setEndsAt(toDatetimeLocalValue(detail.ends_at));
         setDurationMinutes(detail.duration_minutes);
@@ -253,6 +258,7 @@ export default function ExamEditorPage() {
         title: title.trim(),
         description: description.trim() || null,
         instructions: instructions.trim() || null,
+        access_code: accessCode.trim() || null,
         starts_at: fromDatetimeLocalValue(startsAt),
         ends_at: fromDatetimeLocalValue(endsAt),
         duration_minutes: Number(durationMinutes),
@@ -338,7 +344,7 @@ export default function ExamEditorPage() {
             onChange={(event) => setInstructions(event.target.value)}
           />
         </div>
-        <div className="grid sm:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-4 gap-4">
           <Input
             label="Window starts"
             type="datetime-local"
@@ -361,6 +367,12 @@ export default function ExamEditorPage() {
             value={durationMinutes}
             onChange={(event) => setDurationMinutes(event.target.value)}
             required
+          />
+          <Input
+            label="Proctor PIN (optional)"
+            value={accessCode}
+            onChange={(event) => setAccessCode(event.target.value)}
+            placeholder="e.g. LAB-409"
           />
         </div>
       </Card>
@@ -448,6 +460,20 @@ export default function ExamEditorPage() {
                   {importing ? 'Importing…' : 'Import .txt / .csv / .xlsx'}
                 </span>
               </label>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={async () => {
+                  setBankOpen(true);
+                  try {
+                    setBankItems(await adminExamsApi.listQuestionBank());
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                <BookMarked className="h-3.5 w-3.5" /> From bank
+              </Button>
               <Button
                 size="sm"
                 variant="secondary"
@@ -639,6 +665,58 @@ export default function ExamEditorPage() {
           </Card>
         ))}
       </div>
+
+      <Modal
+        open={bankOpen}
+        onClose={() => setBankOpen(false)}
+        title="Insert from question bank"
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-2.5 max-h-96 overflow-y-auto">
+          {bankItems.length === 0 ? (
+            <p className="text-xs text-zinc-500 py-4 text-center">Question bank is empty.</p>
+          ) : (
+            bankItems.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3 flex items-start justify-between gap-3"
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{item.title}</span>
+                    <Badge tone="neutral">{QUESTION_KIND_LABELS[item.kind] || item.kind}</Badge>
+                    <Badge tone="info">{item.marks}m</Badge>
+                  </div>
+                  <p className="text-xs text-zinc-500 line-clamp-2">{item.prompt}</p>
+                </div>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => {
+                    const importedQ = {
+                      kind: item.kind,
+                      prompt: item.prompt,
+                      options: item.options || [],
+                      correct_answer: item.correct_answer,
+                      marks: item.marks,
+                      negative_marks: item.negative_marks,
+                      explanation: item.explanation || '',
+                      numeric_tolerance: item.numeric_tolerance || 0,
+                      coding: item.coding || null,
+                    };
+                    setQuestions((prev) =>
+                      prev.length === 1 && !prev[0].prompt.trim() ? [importedQ] : [...prev, importedQ]
+                    );
+                    notify(`Added "${item.title}"`, 'success');
+                  }}
+                >
+                  Insert
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
     </form>
   );
 }
@@ -775,3 +853,4 @@ function CodingSpecEditor({ spec, onChange, disabled }) {
     </div>
   );
 }
+

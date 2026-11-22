@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Pause, Pencil, Play, Square } from 'lucide-react';
-import { adminExamsApi } from '../../api/endpoints';
+import { ArrowLeft, Clock, FileSpreadsheet, Pause, Pencil, Play, Square } from 'lucide-react';
+import { adminExamsApi, adminMonitorApi } from '../../api/endpoints';
 import { useAuth } from '../../auth/AuthProvider';
 import { EXAM_STATUS_META, extractApiError, formatDateTime } from '../../lib/format';
 import { Badge, Button, ConfirmDialog, Input, Modal, Spinner, Tabs } from '../../components/ui';
@@ -12,6 +12,8 @@ import { GradingTab } from './GradingTab';
 import { AnalyticsTab } from './AnalyticsTab';
 import { ResultsIntegrityTab } from './ResultsIntegrityTab';
 import { AnnouncementsTab } from './AnnouncementsTab';
+import { FeedbackTab } from './FeedbackTab';
+import { RegradesTab } from './RegradesTab';
 
 export default function ExamWorkspacePage() {
   const { examId } = useParams();
@@ -131,6 +133,28 @@ export default function ExamWorkspacePage() {
               <Square className="h-3.5 w-3.5" /> End exam
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              try {
+                const blob = await adminMonitorApi.downloadMarksXlsx(exam.id);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `marks-${exam.id.slice(0, 8)}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                notify('Marks Excel workbook downloaded.', 'success');
+              } catch (error) {
+                notify(extractApiError(error), 'danger');
+              }
+            }}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Export Marks (.xlsx)
+          </Button>
           {isAdmin && (
             <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/exams/${exam.id}/edit`)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
@@ -146,8 +170,10 @@ export default function ExamWorkspacePage() {
           { value: 'live', label: 'Live monitor', badge: exam.in_progress_count },
           { value: 'enrollments', label: 'Enrollments', badge: exam.enrolled_count },
           { value: 'grading', label: 'Grading' },
+          { value: 'regrades', label: 'Regrades' },
           { value: 'analytics', label: 'Analytics' },
           { value: 'results', label: 'Results & integrity', badge: exam.submitted_count },
+          { value: 'feedback', label: 'Feedback' },
           { value: 'announcements', label: 'Announcements' },
         ]}
       />
@@ -160,6 +186,7 @@ export default function ExamWorkspacePage() {
       )}
       {activeTab === 'enrollments' && <EnrollmentsTab examId={exam.id} />}
       {activeTab === 'grading' && <GradingTab examId={exam.id} />}
+      {activeTab === 'regrades' && <RegradesTab examId={exam.id} />}
       {activeTab === 'analytics' && <AnalyticsTab examId={exam.id} />}
       {activeTab === 'results' && (
         <ResultsIntegrityTab
@@ -167,6 +194,7 @@ export default function ExamWorkspacePage() {
           onExamUpdated={(updated) => setExam((prev) => ({ ...prev, ...updated }))}
         />
       )}
+      {activeTab === 'feedback' && <FeedbackTab examId={exam.id} />}
       {activeTab === 'announcements' && <AnnouncementsTab examId={exam.id} />}
 
       <ConfirmDialog
@@ -216,3 +244,4 @@ export default function ExamWorkspacePage() {
     </div>
   );
 }
+

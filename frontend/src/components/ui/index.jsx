@@ -200,7 +200,7 @@ export function Badge({ tone = 'neutral', dot = false, className = '', children 
 export function Card({ className = '', children }) {
   return (
     <div
-      className={`rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${className}`}
+      className={`rounded-xl border border-zinc-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-[0_1px_2px_rgba(0,0,0,0.03)] ${className}`}
     >
       {children}
     </div>
@@ -209,12 +209,16 @@ export function Card({ className = '', children }) {
 
 export function StatCard({ label, value, sublabel, icon: Icon }) {
   return (
-    <Card className="p-4">
+    <Card className="p-4 sm:p-5">
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</span>
-        {Icon && <Icon className="h-4 w-4 text-zinc-400 dark:text-zinc-500 shrink-0" />}
+        {Icon && (
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 shrink-0">
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+        )}
       </div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 tabular-nums">
+      <div className="mt-2.5 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 tabular-nums">
         {value}
       </div>
       {sublabel && <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{sublabel}</div>}
@@ -427,3 +431,4 @@ export function TableShell({ children, className = '' }) {
     </div>
   );
 }
+

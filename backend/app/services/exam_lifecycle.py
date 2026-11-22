@@ -196,3 +196,4 @@ async def apply_exam_lifecycle_action(exam: Exam, action: LifecycleAction, db: A
     new_status = effective_exam_status(exam, now)
     redis_store.publish_in_background(exam_channel(exam.id), "exam_status_changed", exam_id=exam.id, status=new_status)
     return new_status
+

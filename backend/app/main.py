@@ -17,6 +17,7 @@ from app.routers.admin_monitor import router as admin_monitor_router
 from app.routers.admin_people import router as admin_people_router
 from app.routers.auth import router as auth_router
 from app.routers.candidate import router as candidate_router
+from app.routers.extras import router as extras_router
 from app.routers.websockets import router as websockets_router
 from app.seed import seed_database
 from app.services.scoring import sweep_expired_attempts_once
@@ -36,6 +37,23 @@ async def _expiry_sweeper_loop() -> None:
             logger.exception("Error while sweeping expired attempts")
 
 
+async def _ensure_incremental_columns() -> None:
+    """Safely adds v2.1 columns onto existing local SQLite/PostgreSQL databases without dropping data."""
+    column_specs = [
+        ("users", "email_verified", "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ("users", "totp_secret", "VARCHAR(64)"),
+        ("users", "totp_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("users", "backup_codes", "JSON"),
+        ("exams", "access_code", "VARCHAR(32)"),
+    ]
+    for table_name, col_name, col_ddl in column_specs:
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_ddl}"))
+        except (OperationalError, ProgrammingError):
+            pass
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logger.info("Starting ExamPulse v2 [%s]...", settings.instance_id)
@@ -46,6 +64,7 @@ async def lifespan(_app: FastAPI):
         # Multi-instance race: another replica created the tables at the exact same moment.
         if "already exists" not in str(exc).lower():
             raise
+    await _ensure_incremental_columns()
     await seed_database()
     await redis_store.connect()
 
@@ -76,6 +95,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["X-Require-TOTP", "X-Require-Verification", "Retry-After"],
 )
 
 app.include_router(auth_router)
@@ -83,6 +103,7 @@ app.include_router(admin_people_router)
 app.include_router(admin_exams_router)
 app.include_router(admin_monitor_router)
 app.include_router(candidate_router)
+app.include_router(extras_router)
 app.include_router(websockets_router)
 
 

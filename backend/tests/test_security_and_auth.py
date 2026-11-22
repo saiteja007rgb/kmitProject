@@ -72,5 +72,5 @@ async def test_brute_force_lockout_and_rbac(client):
 
     cand_token, _ = await login_as(client, "student2", "password123")
     assert (await client.get("/api/admin/dashboard", headers=auth_headers(cand_token))).status_code == 403
-    # Public self-registration does not exist.
-    assert (await client.post("/api/auth/register", json={"username": "hacker"})).status_code == 404
+    # Registration enforces full validation (rejects malformed/weak payloads).
+    assert (await client.post("/api/auth/register", json={"username": "hacker"})).status_code == 422

@@ -123,6 +123,7 @@ class ExamInput(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     description: str | None = Field(default=None, max_length=4000)
     instructions: str | None = Field(default=None, max_length=10000)
+    access_code: str | None = Field(default=None, max_length=32)
     starts_at: datetime
     ends_at: datetime
     duration_minutes: int = Field(..., ge=1, le=600)
@@ -155,6 +156,7 @@ class ExamSummary(BaseModel):
 
 class ExamDetail(ExamSummary):
     instructions: str | None
+    access_code: str | None = None
     settings: ExamSettings
     questions: list[QuestionAdmin]
 
@@ -201,3 +203,4 @@ class EnrollmentCreateResponse(BaseModel):
 
 class EnrollmentUpdateRequest(BaseModel):
     extra_minutes: int = Field(..., ge=0, le=180)
+
